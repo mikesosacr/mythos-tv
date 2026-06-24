@@ -1,0 +1,1326 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MyTV OS — Admin</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Orbitron:wght@400;700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #070710;
+      --surface:   #0f0f1e;
+      --card:      #151528;
+      --border:    rgba(255,255,255,0.07);
+      --accent:    #7c6af7;
+      --accent2:   #3ecfcf;
+      --danger:    #ef4444;
+      --success:   #22c55e;
+      --warning:   #f59e0b;
+      --text:      #f0f0fa;
+      --muted:     #6060808;
+      --muted2:    #9898b8;
+      --radius:    12px;
+    }
+
+    html, body {
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      background:
+        radial-gradient(ellipse 70% 50% at 15% 10%, rgba(124,106,247,0.12) 0%, transparent 55%),
+        radial-gradient(ellipse 50% 40% at 85% 85%, rgba(62,207,207,0.08) 0%, transparent 50%);
+      pointer-events: none;
+    }
+
+    #root { position: relative; z-index: 1; min-height: 100vh; display: flex; flex-direction: column; }
+
+    /* ── TOP BAR ─────────────────────────────────────────────── */
+    .topbar {
+      display: flex; align-items: center; gap: 16px;
+      padding: 0 28px; height: 56px;
+      background: rgba(10,10,20,0.9);
+      border-bottom: 1px solid var(--border);
+      backdrop-filter: blur(12px);
+      position: sticky; top: 0; z-index: 100;
+    }
+    .topbar-brand {
+      font-family: 'Orbitron', sans-serif;
+      font-size: 1rem; font-weight: 700;
+      background: linear-gradient(135deg, #7c6af7, #3ecfcf);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+    .topbar-divider { width: 1px; height: 22px; background: var(--border); }
+    .topbar-title { font-size: 0.82rem; color: var(--muted2); font-weight: 500; }
+    .topbar-spacer { flex: 1; }
+    .topbar-link {
+      display: flex; align-items: center; gap: 6px;
+      padding: 6px 14px; border-radius: 8px;
+      background: rgba(124,106,247,0.12);
+      color: #a89dff; font-size: 0.78rem; font-weight: 500;
+      text-decoration: none; border: 1px solid rgba(124,106,247,0.2);
+      transition: 0.15s;
+    }
+    .topbar-link:hover { background: rgba(124,106,247,0.22); }
+
+    /* ── LAYOUT ──────────────────────────────────────────────── */
+    .layout {
+      display: flex; flex: 1;
+    }
+
+    /* ── SIDEBAR ─────────────────────────────────────────────── */
+    .sidebar {
+      width: 220px; flex-shrink: 0;
+      padding: 20px 12px;
+      border-right: 1px solid var(--border);
+      display: flex; flex-direction: column; gap: 4px;
+      position: sticky; top: 56px; height: calc(100vh - 56px); overflow-y: auto;
+    }
+    .sidebar-section {
+      font-size: 0.65rem; font-weight: 700; letter-spacing: 0.1em;
+      color: #5a5a78; text-transform: uppercase;
+      padding: 10px 8px 4px;
+    }
+    .sidebar-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 9px 12px; border-radius: 9px;
+      cursor: pointer; transition: 0.15s;
+      color: var(--muted2); font-size: 0.82rem; font-weight: 500;
+      border: 1px solid transparent;
+    }
+    .sidebar-item:hover { background: rgba(255,255,255,0.04); color: var(--text); }
+    .sidebar-item.active {
+      background: rgba(124,106,247,0.14);
+      color: #a89dff;
+      border-color: rgba(124,106,247,0.2);
+    }
+    .sidebar-item .icon { font-size: 1rem; width: 20px; text-align: center; }
+
+    /* ── MAIN CONTENT ────────────────────────────────────────── */
+    .main {
+      flex: 1; padding: 28px 32px;
+      overflow-y: auto; max-height: calc(100vh - 56px);
+    }
+
+    .page { display: none; }
+    .page.active { display: block; }
+
+    .page-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 24px;
+    }
+    .page-title { font-size: 1.3rem; font-weight: 700; }
+    .page-subtitle { font-size: 0.78rem; color: var(--muted2); margin-top: 2px; }
+
+    /* ── CARDS ───────────────────────────────────────────────── */
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px 24px;
+      margin-bottom: 20px;
+    }
+    .card-title {
+      font-size: 0.82rem; font-weight: 600;
+      color: var(--muted2); text-transform: uppercase;
+      letter-spacing: 0.06em; margin-bottom: 16px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .card-title .dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: var(--accent);
+    }
+
+    /* ── FORM ELEMENTS ───────────────────────────────────────── */
+    .form-row {
+      display: flex; gap: 12px; align-items: flex-end; margin-bottom: 10px;
+    }
+    .form-group { display: flex; flex-direction: column; gap: 5px; flex: 1; }
+    .form-group.fixed-100 { flex: 0 0 100px; }
+    .form-group.fixed-140 { flex: 0 0 140px; }
+    .form-group.fixed-80  { flex: 0 0 80px; }
+    label {
+      font-size: 0.73rem; font-weight: 500;
+      color: var(--muted2); text-transform: uppercase; letter-spacing: 0.05em;
+    }
+    input[type="text"], input[type="url"], select, textarea {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 12px;
+      color: var(--text);
+      font-size: 0.82rem;
+      font-family: inherit;
+      outline: none;
+      transition: 0.15s;
+      width: 100%;
+    }
+    input:focus, select:focus, textarea:focus {
+      border-color: rgba(124,106,247,0.5);
+      background: rgba(124,106,247,0.06);
+    }
+    select option { background: #1a1a2e; }
+    textarea { resize: vertical; min-height: 80px; }
+
+    /* ── BUTTONS ─────────────────────────────────────────────── */
+    .btn {
+      display: inline-flex; align-items: center; gap: 7px;
+      padding: 8px 16px; border-radius: 8px;
+      font-size: 0.8rem; font-weight: 600; font-family: inherit;
+      cursor: pointer; border: none; transition: 0.15s;
+      white-space: nowrap;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, #7c6af7, #5a4ed4);
+      color: #fff;
+    }
+    .btn-primary:hover { opacity: 0.88; }
+    .btn-secondary {
+      background: rgba(255,255,255,0.07);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    .btn-secondary:hover { background: rgba(255,255,255,0.11); }
+    .btn-danger {
+      background: rgba(239,68,68,0.15);
+      color: #ef4444;
+      border: 1px solid rgba(239,68,68,0.25);
+    }
+    .btn-danger:hover { background: rgba(239,68,68,0.25); }
+    .btn-success {
+      background: rgba(34,197,94,0.15);
+      color: #22c55e;
+      border: 1px solid rgba(34,197,94,0.25);
+    }
+    .btn-success:hover { background: rgba(34,197,94,0.25); }
+    .btn-sm { padding: 5px 10px; font-size: 0.73rem; }
+    .btn-icon { padding: 6px 8px; }
+
+    /* ── ITEM ROWS (Radio, IPTV) ─────────────────────────────── */
+    .item-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+    .item-row {
+      display: grid;
+      grid-template-columns: 48px 1fr 1fr 100px 36px;
+      gap: 8px;
+      align-items: center;
+      padding: 10px 12px;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      transition: 0.15s;
+    }
+    .item-row:hover { background: rgba(255,255,255,0.05); }
+    .item-row.dragging { opacity: 0.5; }
+    .item-emoji-input {
+      width: 44px; text-align: center;
+      font-size: 1.2rem; padding: 4px;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+    }
+    .drag-handle {
+      cursor: grab; color: #5a5a78; font-size: 0.8rem;
+      display: flex; align-items: center; justify-content: center;
+      padding: 4px;
+    }
+
+    /* IPTV channels have more columns */
+    .iptv-row {
+      grid-template-columns: 48px 1fr 140px 1fr 36px;
+    }
+
+    /* Apps row */
+    .app-row {
+      grid-template-columns: 48px 120px 80px 1fr 80px 36px;
+    }
+
+    /* ── BADGE ───────────────────────────────────────────────── */
+    .badge {
+      display: inline-flex; align-items: center;
+      padding: 2px 8px; border-radius: 20px;
+      font-size: 0.65rem; font-weight: 700; letter-spacing: 0.06em;
+    }
+    .badge-live { background: rgba(239,68,68,0.15); color: #ef4444; }
+    .badge-ok   { background: rgba(34,197,94,0.15); color: #22c55e; }
+    .badge-warn { background: rgba(245,158,11,0.15); color: #f59e0b; }
+
+    /* ── M3U IMPORT ──────────────────────────────────────────── */
+    .m3u-tabs {
+      display: flex; gap: 0; margin-bottom: 16px;
+      border: 1px solid var(--border); border-radius: 9px; overflow: hidden;
+    }
+    .m3u-tab {
+      flex: 1; padding: 9px; text-align: center;
+      font-size: 0.78rem; font-weight: 600; cursor: pointer;
+      background: transparent; color: var(--muted2); transition: 0.15s;
+      border: none; font-family: inherit;
+    }
+    .m3u-tab.active { background: rgba(124,106,247,0.18); color: #a89dff; }
+    .m3u-panel { display: none; }
+    .m3u-panel.active { display: block; }
+
+    /* ── IMPORT RESULT ───────────────────────────────────────── */
+    .import-result {
+      margin-top: 14px; padding: 12px 16px;
+      background: rgba(34,197,94,0.08);
+      border: 1px solid rgba(34,197,94,0.2);
+      border-radius: 9px; font-size: 0.8rem; color: #22c55e;
+      display: none;
+    }
+    .import-result.error {
+      background: rgba(239,68,68,0.08);
+      border-color: rgba(239,68,68,0.2); color: #ef4444;
+    }
+    .import-result.show { display: block; }
+
+    /* ── TOAST ───────────────────────────────────────────────── */
+    #toast {
+      position: fixed; bottom: 24px; right: 24px; z-index: 9999;
+      background: rgba(124,106,247,0.95);
+      color: #fff; padding: 11px 20px; border-radius: 10px;
+      font-size: 0.82rem; font-weight: 600;
+      transform: translateY(80px); opacity: 0;
+      transition: 0.25s cubic-bezier(0.4,0,0.2,1);
+      pointer-events: none;
+    }
+    #toast.show { transform: translateY(0); opacity: 1; }
+
+    /* ── STATS ───────────────────────────────────────────────── */
+    .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 20px; }
+    .stat-card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 16px 20px;
+    }
+    .stat-value { font-size: 1.8rem; font-weight: 700; line-height: 1; }
+    .stat-label { font-size: 0.72rem; color: var(--muted2); margin-top: 4px; }
+    .stat-accent { color: var(--accent); }
+    .stat-cyan   { color: var(--accent2); }
+    .stat-green  { color: #22c55e; }
+    .stat-orange { color: #f59e0b; }
+
+    /* ── SYSTEM SETTINGS GRID ────────────────────────────────── */
+    .system-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .toggle-row {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 0; border-bottom: 1px solid var(--border);
+    }
+    .toggle-row:last-child { border-bottom: none; }
+    .toggle-label { font-size: 0.82rem; }
+    .toggle-desc  { font-size: 0.72rem; color: var(--muted2); margin-top: 2px; }
+    .switch {
+      position: relative; width: 40px; height: 22px;
+    }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .slider {
+      position: absolute; inset: 0;
+      background: rgba(255,255,255,0.1);
+      border-radius: 22px; cursor: pointer; transition: 0.2s;
+    }
+    .slider::before {
+      content: ''; position: absolute;
+      width: 16px; height: 16px; border-radius: 50%;
+      left: 3px; bottom: 3px;
+      background: #888; transition: 0.2s;
+    }
+    .switch input:checked + .slider { background: var(--accent); }
+    .switch input:checked + .slider::before { transform: translateX(18px); background: #fff; }
+
+    /* ── CACHE PANEL ─────────────────────────────────────────── */
+    .cache-info {
+      font-family: monospace; font-size: 0.78rem;
+      color: var(--muted2); background: rgba(0,0,0,0.3);
+      padding: 10px 14px; border-radius: 8px; margin-bottom: 14px;
+      min-height: 40px; white-space: pre-wrap;
+    }
+
+    /* ── COLOR CHIPS ─────────────────────────────────────────── */
+    .color-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+    .chip {
+      width: 22px; height: 22px; border-radius: 50%; cursor: pointer;
+      border: 2px solid transparent; transition: 0.15s;
+    }
+    .chip.selected { border-color: #fff; transform: scale(1.15); }
+    .chip[data-color="purple"] { background: #7c6af7; }
+    .chip[data-color="cyan"]   { background: #3ecfcf; }
+    .chip[data-color="orange"] { background: #f97316; }
+    .chip[data-color="green"]  { background: #22c55e; }
+    .chip[data-color="pink"]   { background: #ec4899; }
+    .chip[data-color="blue"]   { background: #3b82f6; }
+    .chip[data-color="red"]    { background: #ef4444; }
+    .chip[data-color="yellow"] { background: #eab308; }
+
+    /* ── SCROLLBAR ───────────────────────────────────────────── */
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--accent); border-radius: 2px; opacity: 0.4; }
+
+    /* ── HEADER ACTIONS ──────────────────────────────────────── */
+    .header-actions { display: flex; gap: 8px; align-items: center; }
+
+    /* ── EMPTY STATE ─────────────────────────────────────────── */
+    .empty-state {
+      text-align: center; padding: 32px;
+      color: var(--muted2); font-size: 0.8rem;
+    }
+    .empty-state .e-icon { font-size: 2.5rem; margin-bottom: 8px; }
+
+    /* ── TAG ─────────────────────────────────────────────────── */
+    .tag {
+      display: inline-block; padding: 2px 8px;
+      border-radius: 6px; font-size: 0.68rem; font-weight: 600;
+      background: rgba(124,106,247,0.15); color: #a89dff;
+    }
+  </style>
+</head>
+<body>
+<div id="root">
+
+  <!-- TOP BAR -->
+  <header class="topbar">
+    <span class="topbar-brand">MyTV OS</span>
+    <div class="topbar-divider"></div>
+    <span class="topbar-title">Panel de Administración</span>
+    <div class="topbar-spacer"></div>
+    <a href="index.html" class="topbar-link">📺 Ir al TV</a>
+  </header>
+
+  <div class="layout">
+
+    <!-- SIDEBAR -->
+    <nav class="sidebar">
+      <div class="sidebar-section">General</div>
+      <div class="sidebar-item active" data-page="dashboard" onclick="showPage('dashboard')">
+        <span class="icon">🏠</span> Dashboard
+      </div>
+      <div class="sidebar-item" data-page="system" onclick="showPage('system')">
+        <span class="icon">⚙️</span> Sistema
+      </div>
+
+      <div class="sidebar-section">Contenido</div>
+      <div class="sidebar-item" data-page="launcher" onclick="showPage('launcher')">
+        <span class="icon">🚀</span> Launcher Apps
+      </div>
+      <div class="sidebar-item" data-page="iptv" onclick="showPage('iptv')">
+        <span class="icon">📺</span> IPTV / Canales
+      </div>
+      <div class="sidebar-item" data-page="radio" onclick="showPage('radio')">
+        <span class="icon">📻</span> Radio
+      </div>
+
+      <div class="sidebar-section">Importar</div>
+      <div class="sidebar-item" data-page="m3u" onclick="showPage('m3u')">
+        <span class="icon">📥</span> M3U / Threadfin
+      </div>
+
+      <div class="sidebar-section">Avanzado</div>
+      <div class="sidebar-item" data-page="cache" onclick="showPage('cache')">
+        <span class="icon">🗑️</span> Caché / SW
+      </div>
+      <div class="sidebar-item" data-page="backup" onclick="showPage('backup')">
+        <span class="icon">💾</span> Backup / Restore
+      </div>
+    </nav>
+
+    <!-- MAIN -->
+    <main class="main">
+
+      <!-- ══════════ DASHBOARD ══════════ -->
+      <section class="page active" id="page-dashboard">
+        <div class="page-header">
+          <div>
+            <div class="page-title">Dashboard</div>
+            <div class="page-subtitle">Resumen de MyTV OS</div>
+          </div>
+        </div>
+
+        <div class="stats-row">
+          <div class="stat-card">
+            <div class="stat-value stat-accent" id="stat-apps">—</div>
+            <div class="stat-label">Apps en Launcher</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value stat-cyan" id="stat-iptv">—</div>
+            <div class="stat-label">Canales IPTV</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value stat-green" id="stat-radio">—</div>
+            <div class="stat-label">Estaciones Radio</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value stat-orange" id="stat-sw">—</div>
+            <div class="stat-label">Service Worker</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title"><span class="dot"></span> Acceso rápido</div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;">
+            <button class="btn btn-secondary" onclick="showPage('launcher')">🚀 Editar Launcher</button>
+            <button class="btn btn-secondary" onclick="showPage('iptv')">📺 Editar IPTV</button>
+            <button class="btn btn-secondary" onclick="showPage('radio')">📻 Editar Radio</button>
+            <button class="btn btn-secondary" onclick="showPage('m3u')">📥 Importar M3U</button>
+            <button class="btn btn-danger btn-sm" onclick="showPage('cache')">🗑️ Limpiar caché</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title"><span class="dot"></span> Estado del sistema</div>
+          <div id="dash-status" style="font-size:0.8rem;color:var(--muted2);line-height:2;">
+            Cargando…
+          </div>
+        </div>
+      </section>
+
+      <!-- ══════════ SISTEMA ══════════ -->
+      <section class="page" id="page-system">
+        <div class="page-header">
+          <div>
+            <div class="page-title">Sistema</div>
+            <div class="page-subtitle">Configuración general de MyTV OS</div>
+          </div>
+          <div class="header-actions">
+            <button class="btn btn-primary" onclick="saveSystem()">💾 Guardar</button>
+          </div>
+        </div>
+
+        <div class="system-grid">
+          <div class="card">
+            <div class="card-title"><span class="dot"></span> Identidad</div>
+            <div class="form-group" style="margin-bottom:12px;">
+              <label>Nombre del sistema</label>
+              <input type="text" id="sys-name" placeholder="MyTV OS" />
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-title"><span class="dot"></span> Apariencia</div>
+            <div class="form-group" style="margin-bottom:12px;">
+              <label>Fondo de pantalla</label>
+              <select id="sys-wallpaper">
+                <option value="default">Cosmos (por defecto)</option>
+                <option value="aurora">Aurora</option>
+                <option value="city">Ciudad nocturna</option>
+                <option value="abstract">Abstracto</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title"><span class="dot"></span> Opciones</div>
+          <div class="toggle-row">
+            <div>
+              <div class="toggle-label">Efecto Glassmorphism</div>
+              <div class="toggle-desc">Transparencias y blur en la interfaz</div>
+            </div>
+            <label class="switch"><input type="checkbox" id="sys-glass" checked /><span class="slider"></span></label>
+          </div>
+          <div class="toggle-row">
+            <div>
+              <div class="toggle-label">Sonidos de navegación</div>
+              <div class="toggle-desc">Beeps al navegar con el control remoto</div>
+            </div>
+            <label class="switch"><input type="checkbox" id="sys-sound" checked /><span class="slider"></span></label>
+          </div>
+        </div>
+      </section>
+
+      <!-- ══════════ LAUNCHER APPS ══════════ -->
+      <section class="page" id="page-launcher">
+        <div class="page-header">
+          <div>
+            <div class="page-title">Launcher Apps</div>
+            <div class="page-subtitle">Apps que aparecen en la pantalla principal</div>
+          </div>
+          <div class="header-actions">
+            <button class="btn btn-secondary" onclick="addLauncherApp()">➕ Nueva app</button>
+            <button class="btn btn-primary" onclick="saveLauncher()">💾 Guardar</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title"><span class="dot"></span> Apps del launcher</div>
+          <div style="display:grid;grid-template-columns:48px 1fr 100px 1fr 80px 80px 36px;gap:8px;padding:0 12px 8px;font-size:0.68rem;font-weight:700;letter-spacing:0.07em;color:#5a5a78;text-transform:uppercase;">
+            <span>Emoji</span><span>Nombre</span><span>Tipo</span><span>URL / Pantalla</span><span>Color</span><span>Badge</span><span></span>
+          </div>
+          <div class="item-list" id="launcher-list"></div>
+          <button class="btn btn-secondary btn-sm" onclick="addLauncherApp()" style="margin-top:4px;">➕ Agregar app</button>
+        </div>
+      </section>
+
+      <!-- ══════════ IPTV ══════════ -->
+      <section class="page" id="page-iptv">
+        <div class="page-header">
+          <div>
+            <div class="page-title">IPTV / Canales</div>
+            <div class="page-subtitle">Canales de TV en vivo — edita nombres, categorías y URLs de stream</div>
+          </div>
+          <div class="header-actions">
+            <button class="btn btn-secondary" onclick="addIPTVChannel()">➕ Canal</button>
+            <button class="btn btn-primary" onclick="saveIPTV()">💾 Guardar</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title"><span class="dot"></span> Lista de canales <span class="tag" id="iptv-count">0</span></div>
+          <div style="display:grid;grid-template-columns:48px 1fr 140px 1fr 36px;gap:8px;padding:0 12px 8px;font-size:0.68rem;font-weight:700;letter-spacing:0.07em;color:#5a5a78;text-transform:uppercase;">
+            <span>Emoji</span><span>Nombre</span><span>Categoría</span><span>URL Stream / M3U</span><span></span>
+          </div>
+          <div class="item-list" id="iptv-list"></div>
+          <button class="btn btn-secondary btn-sm" onclick="addIPTVChannel()" style="margin-top:4px;">➕ Agregar canal</button>
+        </div>
+      </section>
+
+      <!-- ══════════ RADIO ══════════ -->
+      <section class="page" id="page-radio">
+        <div class="page-header">
+          <div>
+            <div class="page-title">Estaciones de Radio</div>
+            <div class="page-subtitle">Streams de audio — MP3, AAC, HLS</div>
+          </div>
+          <div class="header-actions">
+            <button class="btn btn-secondary" onclick="addRadioStation()">➕ Estación</button>
+            <button class="btn btn-primary" onclick="saveRadio()">💾 Guardar</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title"><span class="dot"></span> Estaciones <span class="tag" id="radio-count">0</span></div>
+          <div style="display:grid;grid-template-columns:48px 1fr 100px 1fr 36px;gap:8px;padding:0 12px 8px;font-size:0.68rem;font-weight:700;letter-spacing:0.07em;color:#5a5a78;text-transform:uppercase;">
+            <span>Emoji</span><span>Nombre</span><span>Género</span><span>URL Stream</span><span></span>
+          </div>
+          <div class="item-list" id="radio-list"></div>
+          <button class="btn btn-secondary btn-sm" onclick="addRadioStation()" style="margin-top:4px;">➕ Agregar estación</button>
+        </div>
+      </section>
+
+      <!-- ══════════ M3U IMPORT ══════════ -->
+      <section class="page" id="page-m3u">
+        <div class="page-header">
+          <div>
+            <div class="page-title">Importar M3U / Threadfin</div>
+            <div class="page-subtitle">Carga listas de canales desde URL o archivo</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title"><span class="dot"></span> Fuente de la lista M3U</div>
+          <div class="m3u-tabs">
+            <button class="m3u-tab active" onclick="switchM3UTab('url')">🔗 Desde URL</button>
+            <button class="m3u-tab" onclick="switchM3UTab('file')">📁 Desde Archivo</button>
+            <button class="m3u-tab" onclick="switchM3UTab('paste')">📋 Pegar texto</button>
+          </div>
+
+          <!-- URL tab -->
+          <div class="m3u-panel active" id="m3u-url-panel">
+            <div class="form-row" style="margin-bottom:12px;">
+              <div class="form-group">
+                <label>URL de la lista M3U (Threadfin, IPTV providers, etc.)</label>
+                <input type="url" id="m3u-url-input" placeholder="http://threadfin:34400/m3u/stream.m3u" />
+              </div>
+            </div>
+            <div style="display:flex;gap:10px;align-items:center;">
+              <button class="btn btn-primary" onclick="fetchM3U()">📥 Cargar lista</button>
+              <span style="font-size:0.75rem;color:#5a5a78;">Threadfin: http://IP:34400/m3u/stream.m3u</span>
+            </div>
+          </div>
+
+          <!-- File tab -->
+          <div class="m3u-panel" id="m3u-file-panel">
+            <div class="form-group" style="margin-bottom:12px;">
+              <label>Archivo .m3u o .m3u8</label>
+              <input type="file" id="m3u-file-input" accept=".m3u,.m3u8,.txt"
+                style="background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);cursor:pointer;"
+                onchange="loadM3UFile(this)" />
+            </div>
+          </div>
+
+          <!-- Paste tab -->
+          <div class="m3u-panel" id="m3u-paste-panel">
+            <div class="form-group" style="margin-bottom:12px;">
+              <label>Pega el contenido M3U aquí</label>
+              <textarea id="m3u-paste-input" rows="8" placeholder="#EXTM3U&#10;#EXTINF:-1 tvg-name=&quot;Canal Ejemplo&quot; group-title=&quot;Nacional&quot;,Canal Ejemplo&#10;http://stream.url/channel.m3u8"></textarea>
+            </div>
+            <button class="btn btn-primary" onclick="parseM3UPaste()">📥 Procesar</button>
+          </div>
+
+          <div class="import-result" id="import-result"></div>
+        </div>
+
+        <div class="card" id="m3u-preview-card" style="display:none;">
+          <div class="card-title" style="justify-content:space-between;">
+            <span><span class="dot"></span> Vista previa — <span id="m3u-preview-count">0</span> canales encontrados</span>
+            <div style="display:flex;gap:8px;">
+              <button class="btn btn-success btn-sm" onclick="importM3UToIPTV()">✅ Importar a IPTV</button>
+              <button class="btn btn-secondary btn-sm" onclick="importM3UToIPTV('replace')">🔄 Reemplazar IPTV</button>
+            </div>
+          </div>
+          <div style="max-height:300px;overflow-y:auto;">
+            <div class="item-list" id="m3u-preview-list"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ══════════ CACHÉ / SW ══════════ -->
+      <section class="page" id="page-cache">
+        <div class="page-header">
+          <div>
+            <div class="page-title">Caché & Service Worker</div>
+            <div class="page-subtitle">Gestión del SW y caché del navegador</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title"><span class="dot"></span> Estado del Service Worker</div>
+          <div class="cache-info" id="sw-status">Verificando…</div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;">
+            <button class="btn btn-danger" onclick="clearAllCache()">🗑️ Limpiar TODO el caché</button>
+            <button class="btn btn-warning btn-secondary" onclick="unregisterSW()">⛔ Desregistrar SW</button>
+            <button class="btn btn-success" onclick="checkSWStatus()">🔄 Actualizar estado</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title"><span class="dot"></span> Instrucciones de solución de problemas</div>
+          <div style="font-size:0.8rem;color:var(--muted2);line-height:1.9;">
+            <p>Si los cambios no se ven en la TV después de guardar:</p>
+            <p>1. Haz clic en <strong style="color:var(--text)">Limpiar TODO el caché</strong> arriba</p>
+            <p>2. Luego abre la app TV → los cambios estarán frescos</p>
+            <p style="margin-top:10px;">Si el problema persiste en el TV:</p>
+            <p>3. En el TV, abre el menú del navegador → <strong style="color:var(--text)">Borrar datos / Caché</strong></p>
+            <p>4. Recarga la página con <strong style="color:var(--text)">Ctrl+Shift+R</strong> (o fuerza recarga)</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ══════════ BACKUP ══════════ -->
+      <section class="page" id="page-backup">
+        <div class="page-header">
+          <div>
+            <div class="page-title">Backup / Restore</div>
+            <div class="page-subtitle">Exporta e importa toda la configuración</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title"><span class="dot"></span> Exportar configuración</div>
+          <p style="font-size:0.8rem;color:var(--muted2);margin-bottom:14px;">
+            Descarga un archivo JSON con toda la configuración: apps, canales IPTV, radios, y ajustes del sistema.
+          </p>
+          <button class="btn btn-primary" onclick="exportConfig()">📤 Descargar backup.json</button>
+        </div>
+
+        <div class="card">
+          <div class="card-title"><span class="dot"></span> Importar configuración</div>
+          <p style="font-size:0.8rem;color:var(--muted2);margin-bottom:14px;">
+            Restaura desde un archivo de backup previo. ⚠️ Esto sobreescribirá la configuración actual.
+          </p>
+          <div class="form-group" style="margin-bottom:12px;">
+            <input type="file" id="restore-file" accept=".json"
+              style="background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);cursor:pointer;" />
+          </div>
+          <button class="btn btn-danger" onclick="importConfig()">📥 Restaurar configuración</button>
+        </div>
+      </section>
+
+    </main>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div id="toast"></div>
+
+<script>
+'use strict';
+
+/* ══════════════════════════════════════════════════════════
+   STORAGE KEYS — deben coincidir con app.js
+   ══════════════════════════════════════════════════════════ */
+const KEYS = {
+  STATE:    'mytv-os-state',
+  IPTV:     'mytv-os-iptv',
+  RADIO:    'mytv-os-radio',
+  LAUNCHER: 'mytv-os-launcher',
+};
+
+/* ── DEFAULTS (mirrors app.js) ────────────────────────── */
+const DEFAULT_LAUNCHER = [
+  { id:'jellyfin', label:'Jellyfin',       sublabel:'Media Server',    emoji:'🎬', type:'external', url:'http://localhost:8096',       color:'purple', badge:'MEDIA'  },
+  { id:'iptv',     label:'IPTV',           sublabel:'TV en vivo',      emoji:'📺', type:'internal', screen:'iptv',                     color:'cyan',   badge:'LIVE'   },
+  { id:'radio',    label:'Radio',          sublabel:'Estaciones',      emoji:'📻', type:'internal', screen:'radio',                    color:'green',  badge:'AUDIO'  },
+  { id:'videos',   label:'Videos',         sublabel:'Biblioteca',      emoji:'🎥', type:'internal', screen:'videos',                   color:'orange', badge:'LOCAL'  },
+  { id:'youtube',  label:'YouTube',        sublabel:'Streaming',       emoji:'▶️', type:'external', url:'https://www.youtube.com/tv',   color:'red',    badge:'WEB'    },
+  { id:'plex',     label:'Plex',           sublabel:'Media Player',    emoji:'🟡', type:'external', url:'https://app.plex.tv',          color:'yellow', badge:'MEDIA'  },
+  { id:'twitch',   label:'Twitch',         sublabel:'Streaming en vivo',emoji:'🎮',type:'external', url:'https://www.twitch.tv',        color:'purple', badge:'LIVE'   },
+  { id:'settings', label:'Configuración',  sublabel:'Sistema',         emoji:'⚙️', type:'internal', screen:'settings',                 color:'blue'                   },
+];
+
+const DEFAULT_IPTV = [
+  { name:'Teletica',     cat:'Nacional',        emoji:'📺', url:'' },
+  { name:'Repretel',    cat:'Nacional',        emoji:'📡', url:'' },
+  { name:'Canal 15',    cat:'Nacional',        emoji:'🎙️', url:'' },
+  { name:'CNN en Español', cat:'Noticias',     emoji:'🌐', url:'' },
+  { name:'ESPN',         cat:'Deportes',       emoji:'⚽', url:'' },
+  { name:'Fox Sports',   cat:'Deportes',       emoji:'🏆', url:'' },
+  { name:'HBO Max',      cat:'Entretenimiento',emoji:'🎭', url:'' },
+  { name:'Netflix TV',   cat:'Entretenimiento',emoji:'🍿', url:'https://www.netflix.com/browse' },
+  { name:'Disney+',      cat:'Familia',        emoji:'🏰', url:'' },
+  { name:'Animal Planet',cat:'Naturaleza',     emoji:'🦁', url:'' },
+  { name:'Discovery',    cat:'Documental',     emoji:'🔭', url:'' },
+  { name:'MTV',          cat:'Música',         emoji:'🎸', url:'' },
+];
+
+const DEFAULT_RADIO = [
+  { name:'Osa Radio Online', genre:'Recuerdos', emoji:'🎸', url:'https://radioscr.digitaltvcr.xyz/listen/osaonline/osaradio' },
+  { name:'Rock FM',          genre:'Rock',      emoji:'🎸', url:'' },
+  { name:'Jazz CR',          genre:'Jazz',      emoji:'🎷', url:'' },
+  { name:'Radio Nacional',   genre:'Clásica',   emoji:'🎻', url:'' },
+  { name:'La Nueva',         genre:'Tropical',  emoji:'🌴', url:'' },
+  { name:'RadioActiva',      genre:'Top 40',    emoji:'🎵', url:'https://playerservices.streamtheworld.com/api/livestream-redirect/RADIOACTIVACOSTARICA.mp3' },
+];
+
+/* ══════════════════════════════════════════════════════════
+   LOAD / SAVE
+   ══════════════════════════════════════════════════════════ */
+function load(key, def) {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : JSON.parse(JSON.stringify(def));
+  } catch { return JSON.parse(JSON.stringify(def)); }
+}
+
+function save(key, val) {
+  localStorage.setItem(key, JSON.stringify(val));
+}
+
+/* ══════════════════════════════════════════════════════════
+   NAV
+   ══════════════════════════════════════════════════════════ */
+function showPage(id) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.sidebar-item').forEach(s => s.classList.remove('active'));
+  document.getElementById('page-' + id).classList.add('active');
+  document.querySelector(`[data-page="${id}"]`).classList.add('active');
+  if (id === 'dashboard') refreshDashboard();
+  if (id === 'launcher')  renderLauncher();
+  if (id === 'iptv')      renderIPTV();
+  if (id === 'radio')     renderRadio();
+  if (id === 'system')    renderSystem();
+  if (id === 'cache')     checkSWStatus();
+}
+
+/* ══════════════════════════════════════════════════════════
+   DASHBOARD
+   ══════════════════════════════════════════════════════════ */
+function refreshDashboard() {
+  const launcher = load(KEYS.LAUNCHER, DEFAULT_LAUNCHER);
+  const iptv     = load(KEYS.IPTV,     DEFAULT_IPTV);
+  const radio    = load(KEYS.RADIO,    DEFAULT_RADIO);
+
+  document.getElementById('stat-apps').textContent  = launcher.length;
+  document.getElementById('stat-iptv').textContent  = iptv.length;
+  document.getElementById('stat-radio').textContent = radio.length;
+
+  // SW status
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.getRegistration().then(reg => {
+      document.getElementById('stat-sw').textContent = reg ? '✅' : '❌';
+    });
+  } else {
+    document.getElementById('stat-sw').textContent = 'N/A';
+  }
+
+  const state = load(KEYS.STATE, {});
+  document.getElementById('dash-status').innerHTML = `
+    <span>🏷️ Nombre del sistema: <strong>${state.systemName || 'MyTV OS'}</strong></span><br/>
+    <span>🎨 Wallpaper: <strong>${state.wallpaper || 'default'}</strong></span><br/>
+    <span>🔊 Sonidos: <strong>${state.soundEnabled !== false ? 'Activos' : 'Desactivados'}</strong></span><br/>
+    <span>🌫️ Glassmorphism: <strong>${state.glassEnabled !== false ? 'Activo' : 'Desactivado'}</strong></span>
+  `;
+}
+
+/* ══════════════════════════════════════════════════════════
+   SYSTEM
+   ══════════════════════════════════════════════════════════ */
+function renderSystem() {
+  const state = load(KEYS.STATE, {});
+  document.getElementById('sys-name').value      = state.systemName || 'MyTV OS';
+  document.getElementById('sys-wallpaper').value = state.wallpaper  || 'default';
+  document.getElementById('sys-glass').checked   = state.glassEnabled !== false;
+  document.getElementById('sys-sound').checked   = state.soundEnabled !== false;
+}
+
+function saveSystem() {
+  const state = load(KEYS.STATE, {});
+  state.systemName   = document.getElementById('sys-name').value.trim() || 'MyTV OS';
+  state.wallpaper    = document.getElementById('sys-wallpaper').value;
+  state.glassEnabled = document.getElementById('sys-glass').checked;
+  state.soundEnabled = document.getElementById('sys-sound').checked;
+  save(KEYS.STATE, state);
+  toast('✅ Sistema guardado');
+}
+
+/* ══════════════════════════════════════════════════════════
+   LAUNCHER
+   ══════════════════════════════════════════════════════════ */
+const COLORS = ['purple','cyan','orange','green','pink','blue','red','yellow'];
+
+function renderLauncher() {
+  const apps = load(KEYS.LAUNCHER, DEFAULT_LAUNCHER);
+  const list = document.getElementById('launcher-list');
+  list.innerHTML = '';
+  apps.forEach((app, i) => {
+    const row = document.createElement('div');
+    row.className = 'item-row';
+    row.style.gridTemplateColumns = '48px 1fr 100px 1fr 80px 80px 36px';
+    row.dataset.index = i;
+
+    row.innerHTML = `
+      <input class="item-emoji-input" type="text" value="${app.emoji}" maxlength="4" data-field="emoji" />
+      <input type="text" placeholder="Nombre" value="${escHtml(app.label)}" data-field="label" />
+      <select data-field="type">
+        <option value="external" ${app.type==='external'?'selected':''}>Externo</option>
+        <option value="internal" ${app.type==='internal'?'selected':''}>Interno</option>
+      </select>
+      <input type="text" placeholder="URL o screen name" value="${escHtml(app.url || app.screen || '')}" data-field="urlscreen" />
+      <div>
+        <div class="color-chips" data-field="color">
+          ${COLORS.map(c=>`<div class="chip ${app.color===c?'selected':''}" data-color="${c}" onclick="selectChip(this)"></div>`).join('')}
+        </div>
+      </div>
+      <input type="text" placeholder="Badge" value="${escHtml(app.badge||'')}" data-field="badge" style="font-size:0.72rem;" />
+      <button class="btn btn-danger btn-icon btn-sm" onclick="removeLauncherRow(${i})">✕</button>
+    `;
+    list.appendChild(row);
+  });
+}
+
+function selectChip(chip) {
+  chip.closest('[data-field="color"]').querySelectorAll('.chip').forEach(c => c.classList.remove('selected'));
+  chip.classList.add('selected');
+}
+
+function addLauncherApp() {
+  const apps = getLauncherFromDOM();
+  apps.push({ id: 'app-' + Date.now(), label: 'Nueva App', sublabel: '', emoji: '🆕', type: 'external', url: '', color: 'purple', badge: '' });
+  save(KEYS.LAUNCHER, apps);
+  renderLauncher();
+}
+
+function removeLauncherRow(i) {
+  const apps = getLauncherFromDOM();
+  apps.splice(i, 1);
+  save(KEYS.LAUNCHER, apps);
+  renderLauncher();
+}
+
+function getLauncherFromDOM() {
+  const rows = document.querySelectorAll('#launcher-list .item-row');
+  return Array.from(rows).map(row => {
+    const emoji     = row.querySelector('[data-field="emoji"]').value;
+    const label     = row.querySelector('[data-field="label"]').value;
+    const type      = row.querySelector('[data-field="type"]').value;
+    const urlscreen = row.querySelector('[data-field="urlscreen"]').value;
+    const badge     = row.querySelector('[data-field="badge"]').value;
+    const colorChip = row.querySelector('[data-field="color"] .chip.selected');
+    const color     = colorChip ? colorChip.dataset.color : 'purple';
+    const existing  = load(KEYS.LAUNCHER, DEFAULT_LAUNCHER)[parseInt(row.dataset.index)] || {};
+    return {
+      id:       existing.id || ('app-' + Date.now()),
+      label,
+      sublabel: existing.sublabel || '',
+      emoji,
+      type,
+      url:      type === 'external' ? urlscreen : (existing.url || ''),
+      screen:   type === 'internal' ? urlscreen : (existing.screen || ''),
+      color,
+      badge,
+    };
+  });
+}
+
+function saveLauncher() {
+  save(KEYS.LAUNCHER, getLauncherFromDOM());
+  toast('✅ Launcher guardado — recarga la app TV para ver cambios');
+}
+
+/* ══════════════════════════════════════════════════════════
+   IPTV
+   ══════════════════════════════════════════════════════════ */
+function renderIPTV() {
+  const channels = load(KEYS.IPTV, DEFAULT_IPTV);
+  const list = document.getElementById('iptv-list');
+  list.innerHTML = '';
+  document.getElementById('iptv-count').textContent = channels.length;
+
+  channels.forEach((ch, i) => {
+    const row = document.createElement('div');
+    row.className = 'item-row iptv-row';
+    row.dataset.index = i;
+    row.innerHTML = `
+      <input class="item-emoji-input" type="text" value="${ch.emoji}" maxlength="4" data-field="emoji" />
+      <input type="text" placeholder="Nombre del canal" value="${escHtml(ch.name)}" data-field="name" />
+      <input type="text" placeholder="Categoría" value="${escHtml(ch.cat)}" data-field="cat" />
+      <input type="url" placeholder="http://stream.url/channel.m3u8" value="${escHtml(ch.url)}" data-field="url" style="font-family:monospace;font-size:0.75rem;" />
+      <button class="btn btn-danger btn-icon btn-sm" onclick="removeIPTVRow(${i})">✕</button>
+    `;
+    list.appendChild(row);
+  });
+}
+
+function getIPTVFromDOM() {
+  return Array.from(document.querySelectorAll('#iptv-list .item-row')).map(row => ({
+    emoji: row.querySelector('[data-field="emoji"]').value,
+    name:  row.querySelector('[data-field="name"]').value,
+    cat:   row.querySelector('[data-field="cat"]').value,
+    url:   row.querySelector('[data-field="url"]').value,
+  }));
+}
+
+function addIPTVChannel() {
+  const channels = getIPTVFromDOM();
+  channels.push({ name: 'Canal Nuevo', cat: 'Sin categoría', emoji: '📡', url: '' });
+  save(KEYS.IPTV, channels);
+  renderIPTV();
+}
+
+function removeIPTVRow(i) {
+  const channels = getIPTVFromDOM();
+  channels.splice(i, 1);
+  save(KEYS.IPTV, channels);
+  renderIPTV();
+}
+
+function saveIPTV() {
+  save(KEYS.IPTV, getIPTVFromDOM());
+  toast('✅ Canales IPTV guardados');
+}
+
+/* ══════════════════════════════════════════════════════════
+   RADIO
+   ══════════════════════════════════════════════════════════ */
+function renderRadio() {
+  const stations = load(KEYS.RADIO, DEFAULT_RADIO);
+  const list = document.getElementById('radio-list');
+  list.innerHTML = '';
+  document.getElementById('radio-count').textContent = stations.length;
+
+  stations.forEach((s, i) => {
+    const row = document.createElement('div');
+    row.className = 'item-row';
+    row.style.gridTemplateColumns = '48px 1fr 100px 1fr 36px';
+    row.dataset.index = i;
+    row.innerHTML = `
+      <input class="item-emoji-input" type="text" value="${s.emoji}" maxlength="4" data-field="emoji" />
+      <input type="text" placeholder="Nombre" value="${escHtml(s.name)}" data-field="name" />
+      <input type="text" placeholder="Género" value="${escHtml(s.genre)}" data-field="genre" />
+      <input type="url" placeholder="https://stream.url/radio.mp3" value="${escHtml(s.url)}" data-field="url" style="font-family:monospace;font-size:0.75rem;" />
+      <button class="btn btn-danger btn-icon btn-sm" onclick="removeRadioRow(${i})">✕</button>
+    `;
+    list.appendChild(row);
+  });
+}
+
+function getRadioFromDOM() {
+  return Array.from(document.querySelectorAll('#radio-list .item-row')).map(row => ({
+    emoji: row.querySelector('[data-field="emoji"]').value,
+    name:  row.querySelector('[data-field="name"]').value,
+    genre: row.querySelector('[data-field="genre"]').value,
+    url:   row.querySelector('[data-field="url"]').value,
+  }));
+}
+
+function addRadioStation() {
+  const stations = getRadioFromDOM();
+  stations.push({ name: 'Nueva Estación', genre: 'Otro', emoji: '📻', url: '' });
+  save(KEYS.RADIO, stations);
+  renderRadio();
+}
+
+function removeRadioRow(i) {
+  const stations = getRadioFromDOM();
+  stations.splice(i, 1);
+  save(KEYS.RADIO, stations);
+  renderRadio();
+}
+
+function saveRadio() {
+  save(KEYS.RADIO, getRadioFromDOM());
+  toast('✅ Estaciones de radio guardadas');
+}
+
+/* ══════════════════════════════════════════════════════════
+   M3U IMPORT
+   ══════════════════════════════════════════════════════════ */
+let _m3uParsed = [];
+
+function switchM3UTab(tab) {
+  document.querySelectorAll('.m3u-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.m3u-panel').forEach(p => p.classList.remove('active'));
+  document.getElementById(`m3u-${tab}-panel`).classList.add('active');
+  event.target.classList.add('active');
+}
+
+async function fetchM3U() {
+  const url = document.getElementById('m3u-url-input').value.trim();
+  if (!url) { showImportResult('error', '⚠️ Ingresa una URL válida'); return; }
+
+  showImportResult('', 'Cargando lista… ⏳');
+  try {
+    // Try direct fetch first; CORS may block it from browser
+    let text;
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      text = await res.text();
+    } catch(corsErr) {
+      showImportResult('error', `❌ CORS bloqueó la petición. Descarga el .m3u manualmente y usa "Desde Archivo" o "Pegar texto".`);
+      return;
+    }
+    processM3U(text);
+  } catch (err) {
+    showImportResult('error', '❌ Error: ' + err.message);
+  }
+}
+
+function loadM3UFile(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => processM3U(e.target.result);
+  reader.readAsText(file);
+}
+
+function parseM3UPaste() {
+  const text = document.getElementById('m3u-paste-input').value;
+  if (!text.trim()) { showImportResult('error', '⚠️ Pega el contenido M3U'); return; }
+  processM3U(text);
+}
+
+function processM3U(text) {
+  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+  if (!lines[0]?.startsWith('#EXTM3U')) {
+    showImportResult('error', '⚠️ No parece un archivo M3U válido (debe empezar con #EXTM3U)');
+    return;
+  }
+
+  const channels = [];
+  let current = null;
+
+  for (const line of lines) {
+    if (line.startsWith('#EXTINF:')) {
+      // Parse attrs
+      const nameMatch = line.match(/,(.+)$/);
+      const tvgName   = line.match(/tvg-name="([^"]+)"/);
+      const group     = line.match(/group-title="([^"]+)"/);
+      const logo      = line.match(/tvg-logo="([^"]+)"/);
+
+      current = {
+        name:  (tvgName ? tvgName[1] : nameMatch ? nameMatch[1] : 'Sin nombre').trim(),
+        cat:   group ? group[1].trim() : 'General',
+        emoji: '📡',
+        url:   '',
+        logo:  logo ? logo[1] : '',
+      };
+    } else if (current && (line.startsWith('http') || line.startsWith('rtmp') || line.startsWith('rtp'))) {
+      current.url = line;
+      channels.push(current);
+      current = null;
+    }
+  }
+
+  if (!channels.length) {
+    showImportResult('error', '⚠️ No se encontraron canales en el archivo');
+    return;
+  }
+
+  _m3uParsed = channels;
+  showImportResult('ok', `✅ ${channels.length} canales encontrados`);
+
+  // Show preview
+  const card = document.getElementById('m3u-preview-card');
+  const list = document.getElementById('m3u-preview-list');
+  const count = document.getElementById('m3u-preview-count');
+  card.style.display = 'block';
+  count.textContent = channels.length;
+  list.innerHTML = '';
+
+  // Show first 50 in preview
+  const preview = channels.slice(0, 50);
+  preview.forEach(ch => {
+    const row = document.createElement('div');
+    row.className = 'item-row iptv-row';
+    row.style.fontSize = '0.78rem';
+    row.innerHTML = `
+      <span style="font-size:1.2rem;text-align:center;">${ch.emoji}</span>
+      <span>${escHtml(ch.name)}</span>
+      <span style="color:var(--muted2)">${escHtml(ch.cat)}</span>
+      <span style="font-family:monospace;font-size:0.7rem;color:var(--muted2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(ch.url)}</span>
+      <span></span>
+    `;
+    list.appendChild(row);
+  });
+
+  if (channels.length > 50) {
+    const more = document.createElement('div');
+    more.className = 'empty-state';
+    more.innerHTML = `<p>... y ${channels.length - 50} canales más</p>`;
+    list.appendChild(more);
+  }
+}
+
+function importM3UToIPTV(mode) {
+  if (!_m3uParsed.length) return;
+
+  if (mode === 'replace') {
+    save(KEYS.IPTV, _m3uParsed);
+    toast(`✅ IPTV reemplazado con ${_m3uParsed.length} canales`);
+  } else {
+    const existing = load(KEYS.IPTV, DEFAULT_IPTV);
+    const merged = [...existing, ..._m3uParsed];
+    save(KEYS.IPTV, merged);
+    toast(`✅ ${_m3uParsed.length} canales añadidos al IPTV (total: ${merged.length})`);
+  }
+  _m3uParsed = [];
+  document.getElementById('m3u-preview-card').style.display = 'none';
+}
+
+function showImportResult(type, msg) {
+  const el = document.getElementById('import-result');
+  el.textContent = msg;
+  el.className = 'import-result show' + (type === 'error' ? ' error' : '');
+}
+
+/* ══════════════════════════════════════════════════════════
+   CACHE / SW
+   ══════════════════════════════════════════════════════════ */
+async function checkSWStatus() {
+  const el = document.getElementById('sw-status');
+  if (!('serviceWorker' in navigator)) {
+    el.textContent = 'Service Workers no soportados en este navegador.';
+    return;
+  }
+
+  const reg = await navigator.serviceWorker.getRegistration();
+  if (!reg) {
+    el.textContent = 'Sin SW registrado.';
+    return;
+  }
+
+  const state = reg.active?.state || 'none';
+  let cacheNames = [];
+  try { cacheNames = await caches.keys(); } catch {}
+
+  el.textContent = [
+    `Estado SW: ${state}`,
+    `Scope: ${reg.scope}`,
+    `Caches activos: ${cacheNames.length > 0 ? cacheNames.join(', ') : 'ninguno'}`,
+    `SW esperando: ${reg.waiting ? 'SÍ' : 'no'}`,
+  ].join('\n');
+}
+
+async function clearAllCache() {
+  // 1. Enviar mensaje al SW
+  if ('serviceWorker' in navigator) {
+    const reg = await navigator.serviceWorker.getRegistration();
+    if (reg?.active) {
+      reg.active.postMessage({ type: 'CLEAR_CACHE' });
+    }
+  }
+
+  // 2. Limpiar desde el cliente también
+  try {
+    const keys = await caches.keys();
+    await Promise.all(keys.map(k => caches.delete(k)));
+    toast('🗑️ Caché limpiado — recarga la app TV con Ctrl+Shift+R');
+  } catch (e) {
+    toast('⚠️ Error limpiando caché: ' + e.message);
+  }
+  setTimeout(checkSWStatus, 500);
+}
+
+async function unregisterSW() {
+  if (!('serviceWorker' in navigator)) { toast('SW no disponible'); return; }
+  const reg = await navigator.serviceWorker.getRegistration();
+  if (!reg) { toast('No hay SW registrado'); return; }
+  const ok = await reg.unregister();
+  toast(ok ? '⛔ SW desregistrado — recarga para ver efecto' : '⚠️ No se pudo desregistrar el SW');
+  setTimeout(checkSWStatus, 500);
+}
+
+/* ══════════════════════════════════════════════════════════
+   BACKUP / RESTORE
+   ══════════════════════════════════════════════════════════ */
+function exportConfig() {
+  const data = {
+    version:  '1.0',
+    exported: new Date().toISOString(),
+    state:    load(KEYS.STATE,    {}),
+    launcher: load(KEYS.LAUNCHER, DEFAULT_LAUNCHER),
+    iptv:     load(KEYS.IPTV,     DEFAULT_IPTV),
+    radio:    load(KEYS.RADIO,    DEFAULT_RADIO),
+  };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `mytv-os-backup-${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+  toast('📤 Backup descargado');
+}
+
+function importConfig() {
+  const file = document.getElementById('restore-file').files[0];
+  if (!file) { toast('⚠️ Selecciona un archivo JSON'); return; }
+
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const data = JSON.parse(e.target.result);
+      if (data.state)    save(KEYS.STATE,    data.state);
+      if (data.launcher) save(KEYS.LAUNCHER, data.launcher);
+      if (data.iptv)     save(KEYS.IPTV,     data.iptv);
+      if (data.radio)    save(KEYS.RADIO,    data.radio);
+      toast('✅ Configuración restaurada — recarga la app TV');
+    } catch {
+      toast('❌ Archivo JSON inválido');
+    }
+  };
+  reader.readAsText(file);
+}
+
+/* ══════════════════════════════════════════════════════════
+   UTILS
+   ══════════════════════════════════════════════════════════ */
+function escHtml(str) {
+  return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+let _toastTimer;
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+/* ══════════════════════════════════════════════════════════
+   INIT
+   ══════════════════════════════════════════════════════════ */
+refreshDashboard();
+</script>
+</body>
+</html>

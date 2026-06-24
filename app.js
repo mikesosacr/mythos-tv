@@ -114,11 +114,25 @@ function loadState() {
     state.soundEnabled= saved.soundEnabled !== undefined ? saved.soundEnabled : true;
     state.glassEnabled= saved.glassEnabled !== undefined ? saved.glassEnabled : true;
     state.wallpaper   = saved.wallpaper   || 'default';
-    // Merge saved app URLs into DEFAULT_APPS
-    state.apps = DEFAULT_APPS.map(app => ({
-      ...app,
-      url: (saved.appUrls && saved.appUrls[app.id]) || app.url,
-    }));
+
+    // Admin panel: if a custom launcher was saved, use it; else merge legacy URLs
+    const adminLauncher = localStorage.getItem('mytv-os-launcher');
+    if (adminLauncher) {
+      try { state.apps = JSON.parse(adminLauncher); }
+      catch { state.apps = [...DEFAULT_APPS]; }
+    } else {
+      state.apps = DEFAULT_APPS.map(app => ({
+        ...app,
+        url: (saved.appUrls && saved.appUrls[app.id]) || app.url,
+      }));
+    }
+
+    // Admin-configured IPTV channels and Radio stations
+    const adminIPTV  = localStorage.getItem('mytv-os-iptv');
+    const adminRadio = localStorage.getItem('mytv-os-radio');
+    if (adminIPTV)  try { state.iptvChannels  = JSON.parse(adminIPTV);  } catch {}
+    if (adminRadio) try { state.radioStations = JSON.parse(adminRadio); } catch {}
+
   } catch {
     state.apps = [...DEFAULT_APPS];
   }
@@ -570,6 +584,7 @@ const IPTV_CHANNELS = [
 
 function openIPTV() {
   navigateTo('app', 'IPTV · TV en Vivo', () => {
+    const channels = state.iptvChannels || IPTV_CHANNELS;
     const title = document.getElementById('app-screen-title');
     const body  = document.getElementById('app-screen-body');
     const back  = document.getElementById('app-back');
@@ -583,7 +598,7 @@ function openIPTV() {
         <span style="background:rgba(239,68,68,0.15);color:#ef4444;padding:3px 10px;border-radius:20px;font-size:0.7rem;font-weight:700;letter-spacing:0.06em;">● LIVE</span>
       </div>
       <div class="iptv-grid">
-        ${IPTV_CHANNELS.map((ch, i) => `
+        ${channels.map((ch, i) => `
           <a class="iptv-channel" href="${ch.url || '#'}" ${ch.url ? 'target="_blank"' : ''} role="button" tabindex="${i === 0 ? 0 : -1}">
             <div class="iptv-channel-logo">${ch.emoji}</div>
             <div class="iptv-channel-name">${ch.name}</div>
@@ -600,16 +615,47 @@ function openIPTV() {
 
 /* ── Radio Screen ────────────────────────────────────────────── */
 const RADIO_STATIONS = [
-  { name: 'RadioActiva',     genre: 'Top 40',     emoji: '🎵', url: 'https://playerservices.streamtheworld.com/api/livestream-redirect/RADIOACTIVACOSTARICA.mp3' },
-  { name: 'Bésame',          genre: 'Romántica',  emoji: '❤️',  url: '' },
-  { name: 'Rock FM',         genre: 'Rock',       emoji: '🎸', url: '' },
-  { name: 'Jazz CR',         genre: 'Jazz',       emoji: '🎷', url: '' },
-  { name: 'Radio Nacional',  genre: 'Clásica',    emoji: '🎻', url: '' },
-  { name: 'La Nueva',        genre: 'Tropical',   emoji: '🌴', url: '' },
+  {
+    name: 'Osa Radio Online',
+    genre: 'Recuerdos',
+    emoji: '🎸',
+    url: 'https://radioscr.digitaltvcr.xyz/listen/osaonline/osaradio'
+  },
+  {
+    name: 'Rock FM',
+    genre: 'Rock',
+    emoji: '🎸',
+    url: ''
+  },
+  {
+    name: 'Jazz CR',
+    genre: 'Jazz',
+    emoji: '🎷',
+    url: ''
+  },
+  {
+    name: 'Radio Nacional',
+    genre: 'Clásica',
+    emoji: '🎻',
+    url: ''
+  },
+  {
+    name: 'La Nueva',
+    genre: 'Tropical',
+    emoji: '🌴',
+    url: ''
+  },
+  {
+    name: 'RadioActiva',
+    genre: 'Top 40',
+    emoji: '🎵',
+    url: 'https://playerservices.streamtheworld.com/api/livestream-redirect/RADIOACTIVACOSTARICA.mp3'
+  }
 ];
 
 function openRadio() {
   navigateTo('app', 'Radio', () => {
+    const stations = state.radioStations || RADIO_STATIONS;
     const title = document.getElementById('app-screen-title');
     const body  = document.getElementById('app-screen-body');
     const back  = document.getElementById('app-back');
@@ -637,7 +683,7 @@ function openRadio() {
           </div>
         </div>
         <div class="radio-stations" id="radio-stations">
-          ${RADIO_STATIONS.map((s, i) => `
+          ${stations.map((s, i) => `
             <div class="radio-station-item" data-index="${i}" tabindex="${i===0?0:-1}">
               <span class="radio-emoji">${s.emoji}</span>
               <div class="radio-info">
@@ -666,7 +712,7 @@ function openRadio() {
 
 function selectStation(i) {
   state.currentRadioStation = i;
-  const s = RADIO_STATIONS[i];
+  const s = (state.radioStations || RADIO_STATIONS)[i];
 
   document.getElementById('radio-station-name').textContent  = s.name;
   document.getElementById('radio-station-freq').textContent  = s.genre;
@@ -683,7 +729,7 @@ function toggleRadioPlay() {
   if (state.radioPlaying) {
     stopRadio();
   } else {
-    const s = RADIO_STATIONS[state.currentRadioStation];
+    const s = (state.radioStations || RADIO_STATIONS)[state.currentRadioStation];
     startRadioStream(s.url);
   }
 }
@@ -721,7 +767,8 @@ function stopRadio() {
 }
 
 function changeStation(dir) {
-  const next = (state.currentRadioStation + dir + RADIO_STATIONS.length) % RADIO_STATIONS.length;
+  const stations = state.radioStations || RADIO_STATIONS;
+  const next = (state.currentRadioStation + dir + stations.length) % stations.length;
   selectStation(next);
 }
 
