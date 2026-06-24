@@ -1,0 +1,30 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0d0d1a"/>
+      <stop offset="100%" stop-color="#070710"/>
+    </linearGradient>
+    <linearGradient id="grad" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#7c6af7"/>
+      <stop offset="100%" stop-color="#3ecfcf"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <!-- Background -->
+  <rect width="512" height="512" rx="80" fill="url(#bg)"/>
+  <!-- TV frame -->
+  <rect x="60" y="100" width="392" height="240" rx="24" stroke="url(#grad)" stroke-width="14" fill="none" filter="url(#glow)"/>
+  <!-- Stand -->
+  <rect x="186" y="340" width="140" height="30" rx="8" fill="url(#grad)"/>
+  <rect x="136" y="370" width="240" height="16" rx="8" fill="url(#grad)"/>
+  <!-- Play button circle -->
+  <circle cx="256" cy="220" r="64" stroke="url(#grad)" stroke-width="10" fill="rgba(124,106,247,0.12)" filter="url(#glow)"/>
+  <!-- Play triangle -->
+  <polygon points="236,192 236,248 292,220" fill="url(#grad)" filter="url(#glow)"/>
+  <!-- MyTV OS text -->
+  <text x="256" y="456" font-family="Arial Black, sans-serif" font-size="52" font-weight="900" 
+        fill="url(#grad)" text-anchor="middle" letter-spacing="4">MyTV OS</text>
+</svg>

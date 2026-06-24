@@ -1,0 +1,50 @@
+{
+  "name": "MyTV OS",
+  "short_name": "MyTV OS",
+  "description": "Tu sistema operativo de entretenimiento personal",
+  "start_url": "/index.html",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#070710",
+  "theme_color": "#0a0a0f",
+  "lang": "es",
+  "categories": ["entertainment", "utilities"],
+  "icons": [
+    {
+      "src": "assets/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "assets/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "assets/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "MyTV OS Launcher"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "IPTV",
+      "url": "/index.html#iptv",
+      "description": "TV en vivo",
+      "icons": [{ "src": "assets/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Radio",
+      "url": "/index.html#radio",
+      "description": "Estaciones de radio",
+      "icons": [{ "src": "assets/icons/icon-192.png", "sizes": "192x192" }]
+    }
+  ],
+  "prefer_related_applications": false
+}

@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#0a0a0f" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="MyTV OS" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="description" content="MyTV OS – Tu sistema operativo de entretenimiento personal" />
+
+  <!-- TV-specific meta -->
+  <meta name="screen-orientation" content="landscape" />
+
+  <title>MyTV OS</title>
+
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" type="image/png" sizes="192x192" href="assets/icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="assets/icons/icon-512.png" />
+  <link rel="stylesheet" href="styles.css" />
+
+  <!-- Preconnect fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet" />
+</head>
+<body>
+
+  <!-- ═══════════════════════════════════════════ BOOT SCREEN -->
+  <div id="boot-screen" class="boot-screen">
+    <div class="boot-logo">
+      <div class="boot-logo-icon">
+        <svg viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="4" y="12" width="72" height="48" rx="6" stroke="url(#grad1)" stroke-width="3" fill="none"/>
+          <rect x="28" y="60" width="24" height="6" fill="url(#grad1)" rx="2"/>
+          <rect x="18" y="66" width="44" height="3" fill="url(#grad1)" rx="1.5"/>
+          <circle cx="40" cy="36" r="12" stroke="url(#grad1)" stroke-width="2.5" fill="none"/>
+          <polygon points="36,30 36,42 48,36" fill="url(#grad1)"/>
+          <defs>
+            <linearGradient id="grad1" x1="0" y1="0" x2="80" y2="80" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stop-color="#7c6af7"/>
+              <stop offset="100%" stop-color="#3ecfcf"/>
+            </linearGradient>
+          </defs>
+        </svg>
+      </div>
+      <div class="boot-logo-text">
+        <span class="boot-brand">MyTV</span><span class="boot-os">OS</span>
+      </div>
+    </div>
+    <div class="boot-bar-wrap">
+      <div class="boot-bar">
+        <div class="boot-bar-fill" id="boot-bar-fill"></div>
+      </div>
+      <p class="boot-status" id="boot-status">Iniciando sistema…</p>
+    </div>
+    <div class="boot-version">v1.0.0 · MyTV OS</div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════ APP CONTAINER -->
+  <div id="app" class="app hidden">
+
+    <!-- TOP BAR -->
+    <header class="topbar" id="topbar">
+      <div class="topbar-left">
+        <span class="topbar-brand">MyTV<span class="topbar-os">OS</span></span>
+      </div>
+      <div class="topbar-center" id="topbar-title">Inicio</div>
+      <div class="topbar-right">
+        <span class="topbar-time" id="topbar-time">--:--</span>
+        <span class="topbar-date" id="topbar-date">---</span>
+        <div class="topbar-icons">
+          <span class="topbar-icon" title="WiFi">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/>
+              <path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><circle cx="12" cy="20" r="1" fill="currentColor"/>
+            </svg>
+          </span>
+        </div>
+      </div>
+    </header>
+
+    <!-- MAIN VIEW PORT -->
+    <main class="viewport" id="viewport">
+
+      <!-- HOME SCREEN -->
+      <section class="screen active" id="screen-home">
+        <div class="home-greeting" id="home-greeting">Buenas noches</div>
+        <div class="home-subtitle">¿Qué quieres ver hoy?</div>
+
+        <div class="app-grid" id="app-grid" role="grid" aria-label="Aplicaciones">
+          <!-- Apps rendered by JS -->
+        </div>
+
+        <div class="home-footer">
+          <span class="hint-key">↑↓←→</span> Navegar
+          <span class="hint-sep">·</span>
+          <span class="hint-key">Enter</span> Abrir
+          <span class="hint-sep">·</span>
+          <span class="hint-key">Esc</span> Volver
+        </div>
+      </section>
+
+      <!-- SETTINGS SCREEN -->
+      <section class="screen" id="screen-settings">
+        <div class="screen-header">
+          <button class="back-btn" id="settings-back" aria-label="Volver">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <polyline points="15,18 9,12 15,6"/>
+            </svg>
+            Atrás
+          </button>
+          <h2 class="screen-title">Configuración</h2>
+        </div>
+
+        <div class="settings-grid">
+          <div class="settings-section">
+            <h3 class="settings-section-title">Apps &amp; Links</h3>
+            <div class="settings-list" id="settings-apps-list">
+              <!-- rendered by JS -->
+            </div>
+          </div>
+          <div class="settings-section">
+            <h3 class="settings-section-title">Sistema</h3>
+            <div class="settings-list">
+              <div class="settings-item">
+                <label class="settings-label">Nombre del sistema</label>
+                <input type="text" class="settings-input" id="setting-system-name" value="MyTV OS" placeholder="Ej: Casa Sola" />
+              </div>
+              <div class="settings-item">
+                <label class="settings-label">Fondo de pantalla</label>
+                <select class="settings-select" id="setting-wallpaper">
+                  <option value="default">Cosmos (por defecto)</option>
+                  <option value="aurora">Aurora</option>
+                  <option value="city">Ciudad nocturna</option>
+                  <option value="abstract">Abstracto</option>
+                </select>
+              </div>
+              <div class="settings-item">
+                <label class="settings-label">Efecto glassmorphism</label>
+                <label class="toggle-switch">
+                  <input type="checkbox" id="setting-glass" checked />
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+              <div class="settings-item">
+                <label class="settings-label">Sonidos de navegación</label>
+                <label class="toggle-switch">
+                  <input type="checkbox" id="setting-sound" checked />
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+            </div>
+          </div>
+          <div class="settings-section">
+            <h3 class="settings-section-title">Acerca de</h3>
+            <div class="settings-about">
+              <div class="about-logo">MyTV<span>OS</span></div>
+              <p>Versión 1.0.0</p>
+              <p>PWA · Sistema Operativo TV Personal</p>
+              <p>Optimizado para TV 1080p / 4K</p>
+            </div>
+          </div>
+        </div>
+        <div class="settings-footer">
+          <button class="btn-primary" id="settings-save">Guardar cambios</button>
+        </div>
+      </section>
+
+      <!-- GENERIC APP SCREEN (IPTV, Radio, Videos) -->
+      <section class="screen" id="screen-app">
+        <div class="screen-header">
+          <button class="back-btn" id="app-back" aria-label="Volver">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <polyline points="15,18 9,12 15,6"/>
+            </svg>
+            Atrás
+          </button>
+          <h2 class="screen-title" id="app-screen-title">App</h2>
+        </div>
+        <div class="app-screen-body" id="app-screen-body">
+          <!-- Contenido dinámico -->
+        </div>
+      </section>
+
+    </main>
+
+    <!-- FOCUS GLOW OVERLAY (decorative) -->
+    <div class="focus-glow-overlay" id="focus-glow" aria-hidden="true"></div>
+
+    <!-- NOTIFICATION TOAST -->
+    <div class="toast" id="toast" aria-live="polite"></div>
+
+  </div><!-- /#app -->
+
+  <!-- AUDIO ENGINE (invisible) -->
+  <audio id="snd-nav" src="" preload="none"></audio>
+  <audio id="snd-enter" src="" preload="none"></audio>
+
+  <script src="app.js"></script>
+</body>
+</html>
