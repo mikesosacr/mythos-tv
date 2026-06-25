@@ -1,0 +1,103 @@
+{
+  "systemName": "MyTV OS",
+  "wallpaper": "default",
+  "glassEnabled": true,
+  "soundEnabled": true,
+  "launcher": [
+    {
+      "id": "jellyfin",
+      "label": "Jellyfin",
+      "sublabel": "Media Server",
+      "emoji": "🎬",
+      "type": "external",
+      "url": "http://localhost:8096",
+      "color": "purple",
+      "badge": "MEDIA"
+    },
+    {
+      "id": "livetv",
+      "label": "Live TV",
+      "sublabel": "Canales en vivo",
+      "emoji": "📺",
+      "type": "internal",
+      "screen": "livetv",
+      "color": "cyan",
+      "badge": "LIVE"
+    },
+    {
+      "id": "movies",
+      "label": "Películas",
+      "sublabel": "VOD",
+      "emoji": "🎬",
+      "type": "internal",
+      "screen": "movies",
+      "color": "orange",
+      "badge": "VOD"
+    },
+    {
+      "id": "radio",
+      "label": "Radio",
+      "sublabel": "Estaciones",
+      "emoji": "📻",
+      "type": "internal",
+      "screen": "radio",
+      "color": "green",
+      "badge": "AUDIO"
+    },
+    {
+      "id": "youtube",
+      "label": "YouTube",
+      "sublabel": "Streaming",
+      "emoji": "▶️",
+      "type": "external",
+      "url": "https://www.youtube.com/tv",
+      "color": "red",
+      "badge": "WEB"
+    },
+    {
+      "id": "plex",
+      "label": "Plex",
+      "sublabel": "Media Player",
+      "emoji": "🟡",
+      "type": "external",
+      "url": "https://app.plex.tv",
+      "color": "yellow",
+      "badge": "MEDIA"
+    },
+    {
+      "id": "twitch",
+      "label": "Twitch",
+      "sublabel": "En vivo",
+      "emoji": "🎮",
+      "type": "external",
+      "url": "https://www.twitch.tv",
+      "color": "purple",
+      "badge": "LIVE"
+    },
+    {
+      "id": "settings",
+      "label": "Configuración",
+      "sublabel": "Sistema",
+      "emoji": "⚙️",
+      "type": "internal",
+      "screen": "settings",
+      "color": "blue"
+    }
+  ],
+  "livetv": [],
+  "movies": [],
+  "radio": [
+    {
+      "name": "Osa Radio Online",
+      "genre": "Recuerdos",
+      "emoji": "🎸",
+      "url": "https://radioscr.digitaltvcr.xyz/listen/osaonline/osaradio"
+    },
+    {
+      "name": "RadioActiva",
+      "genre": "Top 40",
+      "emoji": "🎵",
+      "url": "https://playerservices.streamtheworld.com/api/livestream-redirect/RADIOACTIVACOSTARICA.mp3"
+    }
+  ]
+}

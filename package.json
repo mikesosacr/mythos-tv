@@ -1,0 +1,13 @@
+{
+  "name": "mytv-os",
+  "version": "2.0.0",
+  "description": "MyTV OS Backend",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}

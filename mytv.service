@@ -1,0 +1,17 @@
+[Unit]
+Description=MyTV OS API Server
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/mytvos
+ExecStart=/usr/bin/node /home/ubuntu/mytvos/server.js
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=mytv-os
+
+[Install]
+WantedBy=multi-user.target
