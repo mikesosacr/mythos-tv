@@ -399,6 +399,20 @@ function playStream(url, title) {
   video.addEventListener('waiting', () => { loading.style.display = 'flex'; });
   video.addEventListener('canplay', () => { loading.style.display = 'none'; });
 
+  // Detectar tipo de stream:
+  //  - .m3u8  -> HLS.js / HLS nativo (Safari, smart TVs)
+  //  - cualquier otra cosa (.mp4, .mkv, sin extensión, etc.) -> <video> nativo
+  //    a través del proxy del servidor, para evitar el bloqueo CORS de
+  //    servidores externos (object storage, archive.org, etc.)
+  const isM3U8 = /\.m3u8(\?|#|$)/i.test(url);
+
+  if (!isM3U8) {
+    const proxied = `${API}/proxy-stream?url=${encodeURIComponent(url)}`;
+    video.src = proxied;
+    video.play().catch(() => showToast('⚠️ El navegador bloqueó el autoplay'));
+    return;
+  }
+
   // Try HLS.js first, then native
   if (typeof Hls !== 'undefined' && Hls.isSupported()) {
     const hls = new Hls({
@@ -423,7 +437,7 @@ function playStream(url, title) {
     video.src = url;
     video.play().catch(() => {});
   } else {
-    // Fallback: direct src (MP4, etc.)
+    // Fallback: direct src
     video.src = url;
     video.play().catch(() => {});
   }

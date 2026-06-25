@@ -85,7 +85,7 @@ app.use(express.json({ limit: '10mb' }));
 // CORS — allow same origin and local network
 app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Admin-Token');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Admin-Token, Range');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   if (req.method === 'OPTIONS') return res.sendStatus(200);
   next();
@@ -151,6 +151,65 @@ app.get('/api/admin/fetch-m3u', async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
+});
+
+// ── PUBLIC: Proxy de stream (resuelve CORS para .mp4/.m3u8 externos) ──
+// NOTA: NO usa checkAuth — lo llama el player de cualquier TV/dispositivo,
+// no solo el panel admin. La seguridad acá es la whitelist de hosts.
+const ALLOWED_PROXY_HOSTS = [
+  'objectstorage.oracle.com',
+  'archive.org',
+  'us.archive.org',
+  'ia801409.us.archive.org', // ejemplos archive.org — ajustar según tus listas reales
+  'ia800504.us.archive.org',
+];
+
+function hostAllowed(hostname) {
+  return ALLOWED_PROXY_HOSTS.some(h => hostname === h || hostname.endsWith('.' + h));
+}
+
+function proxyStream(targetUrl, req, res, redirectsLeft) {
+  let parsed;
+  try { parsed = new URL(targetUrl); }
+  catch { return res.status(400).json({ error: 'url inválida' }); }
+
+  if (!hostAllowed(parsed.hostname)) {
+    return res.status(403).json({ error: 'host no permitido: ' + parsed.hostname });
+  }
+
+  const proto = parsed.protocol === 'https:' ? https : http;
+  const headers = {
+    'User-Agent': 'Mozilla/5.0 (SMART-TV; Linux; Tizen 6.0) AppleWebKit/538.1 (KHTML, like Gecko) Version/6.0 TV Safari/538.1',
+  };
+  if (req.headers.range) headers['Range'] = req.headers.range; // necesario para "seek" en <video>
+
+  const upstreamReq = proto.get(targetUrl, { headers }, (upstream) => {
+    // Seguir redirecciones (muy común en object storage / CDN)
+    if ([301, 302, 303, 307, 308].includes(upstream.statusCode) && upstream.headers.location && redirectsLeft > 0) {
+      upstream.resume(); // descartar body del redirect
+      const nextUrl = new URL(upstream.headers.location, targetUrl).toString();
+      return proxyStream(nextUrl, req, res, redirectsLeft - 1);
+    }
+
+    res.statusCode = upstream.statusCode;
+    res.setHeader('Content-Type', upstream.headers['content-type'] || 'application/octet-stream');
+    if (upstream.headers['content-length']) res.setHeader('Content-Length', upstream.headers['content-length']);
+    if (upstream.headers['content-range'])  res.setHeader('Content-Range', upstream.headers['content-range']);
+    if (upstream.headers['accept-ranges'])  res.setHeader('Accept-Ranges', upstream.headers['accept-ranges']);
+    upstream.pipe(res);
+  });
+
+  upstreamReq.on('error', (e) => {
+    if (!res.headersSent) res.status(502).json({ error: e.message });
+  });
+
+  req.on('close', () => upstreamReq.destroy());
+}
+
+app.get('/api/proxy-stream', (req, res) => {
+  const url = req.query.url;
+  if (!url) return res.status(400).json({ error: 'url requerida' });
+  proxyStream(url, req, res, 3);
 });
 
 // ── Start ────────────────────────────────────────────────────────
