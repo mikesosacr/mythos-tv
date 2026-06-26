@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════
-   MythOS TV — app.js v2.0
+   MyTV OS — app.js v2.0
    Config global desde servidor · HLS.js player · Live TV / Movies
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
@@ -26,7 +26,7 @@ const state = {
   focusIndex:          0,
   soundEnabled:        true,
   glassEnabled:        true,
-  systemName:          'MythOS TV',
+  systemName:          'MyTV OS',
   wallpaper:           'default',
   radioPlaying:        false,
   currentRadioStation: 0,
@@ -51,7 +51,7 @@ async function loadConfig() {
 }
 
 function applyConfig(cfg) {
-  state.systemName   = cfg.systemName   || 'MythOS TV';
+  state.systemName   = cfg.systemName   || 'MyTV OS';
   state.wallpaper    = cfg.wallpaper    || 'default';
   state.glassEnabled = cfg.glassEnabled !== false;
   state.soundEnabled = cfg.soundEnabled !== false;
@@ -65,7 +65,7 @@ function applyConfig(cfg) {
    BOOT SEQUENCE
    ══════════════════════════════════════════════════════════════ */
 const BOOT_MESSAGES = [
-  'Iniciando MythOS TV…',
+  'Iniciando MyTV OS…',
   'Cargando configuración…',
   'Preparando launcher…',
   'Listo para usar',
@@ -108,14 +108,11 @@ function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
 function initUI() {
   applySettings(false);
   renderAppGrid();
-  renderSuggestions();
   initClock();
   initRemoteNav();
   initFocusGlow();
   initAudio();
   createModal();
-  initDetailModal();
-  state.focusZone = 'dock';
   focusTile(0);
 }
 
@@ -164,14 +161,12 @@ function renderAppGrid() {
     tile.innerHTML = `
       <div class="tile-bg" aria-hidden="true"></div>
       ${app.badge ? `<span class="tile-badge">${app.badge}</span>` : ''}
-      <div class="tile-icon">${app.logo
-        ? `<img src="${app.logo}" alt="" data-fallback="${app.emoji || '🚀'}" onerror="handleImgError(this)" />`
-        : app.emoji}</div>
+      <div class="tile-icon">${app.emoji}</div>
       <div class="tile-label">${app.label}</div>
       ${app.sublabel ? `<div class="tile-sublabel">${app.sublabel}</div>` : ''}
     `;
     tile.addEventListener('click', () => launchApp(app));
-    tile.addEventListener('mouseenter', () => { state.focusZone = 'dock'; state.focusIndex = i; updateTileFocus(); });
+    tile.addEventListener('mouseenter', () => { state.focusIndex = i; updateTileFocus(); });
     grid.appendChild(tile);
   });
 }
@@ -181,19 +176,17 @@ function getTiles() { return [...document.querySelectorAll('.app-tile')]; }
 function focusTile(index) {
   const tiles = getTiles();
   if (!tiles.length) return;
-  state.focusZone = 'dock';
   state.focusIndex = Math.max(0, Math.min(index, tiles.length - 1));
   updateTileFocus();
 }
 
 function updateTileFocus() {
   const tiles = getTiles();
-  const inDock = state.focusZone === 'dock';
   tiles.forEach((t, i) => {
-    const isFocused = inDock && i === state.focusIndex;
-    t.classList.toggle('focused', isFocused);
-    t.setAttribute('tabindex', isFocused ? '0' : '-1');
+    t.classList.toggle('focused', i === state.focusIndex);
+    t.setAttribute('tabindex', i === state.focusIndex ? '0' : '-1');
   });
+  tiles[state.focusIndex]?.scrollIntoView({ behavior:'smooth', block:'nearest', inline:'nearest' });
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -210,236 +203,18 @@ function handleKey(e) {
 }
 
 function handleHomeKey(key) {
-  // Si el modal de detalle está abierto, manejarlo primero
-  if (!document.getElementById('detail-overlay').classList.contains('hidden')) {
-    if (key === 'Escape' || key === 'Backspace') { playSnd('nav'); closeDetailModal(); }
-    if (key === 'Enter') document.getElementById('detail-play-btn').click();
-    return;
-  }
-
   const tiles = getTiles();
-
-  // focusZone: 'dock' | 'movies' | 'livetv'
-  const zone = state.focusZone || 'dock';
-
+  if (!tiles.length) return;
+  const grid = document.getElementById('app-grid');
+  const tileW = tiles[0].offsetWidth + parseInt(getComputedStyle(grid).gap || '24');
+  const cols  = Math.max(1, Math.floor(grid.offsetWidth / tileW));
   switch (key) {
-    case 'ArrowRight':
-      playSnd('nav');
-      if (zone === 'dock') {
-        focusTile((state.focusIndex + 1) % tiles.length);
-      } else {
-        moveSuggFocus(zone, 1);
-      }
-      break;
-    case 'ArrowLeft':
-      playSnd('nav');
-      if (zone === 'dock') {
-        focusTile((state.focusIndex - 1 + tiles.length) % tiles.length);
-      } else {
-        moveSuggFocus(zone, -1);
-      }
-      break;
-    case 'ArrowUp':
-      playSnd('nav');
-      if (zone === 'dock') {
-        setFocusZone('livetv');
-      } else if (zone === 'livetv') {
-        setFocusZone('movies');
-      }
-      break;
-    case 'ArrowDown':
-      playSnd('nav');
-      if (zone === 'movies') {
-        setFocusZone('livetv');
-      } else if (zone === 'livetv') {
-        setFocusZone('dock');
-      }
-      break;
-    case 'Enter':
-      playSnd('enter');
-      if (zone === 'dock') {
-        const app = state.apps[state.focusIndex];
-        if (app) launchApp(app);
-      } else {
-        openDetailForFocused(zone);
-      }
-      break;
+    case 'ArrowRight': playSnd('nav'); focusTile((state.focusIndex + 1) % tiles.length); break;
+    case 'ArrowLeft':  playSnd('nav'); focusTile((state.focusIndex - 1 + tiles.length) % tiles.length); break;
+    case 'ArrowDown':  playSnd('nav'); focusTile(Math.min(state.focusIndex + cols, tiles.length - 1)); break;
+    case 'ArrowUp':    playSnd('nav'); focusTile(Math.max(state.focusIndex - cols, 0)); break;
+    case 'Enter': { playSnd('enter'); const app = state.apps[state.focusIndex]; if (app) launchApp(app); break; }
   }
-}
-
-/* ══════════════════════════════════════════════════════════════
-   SUGERENCIAS — renderizado y navegación
-   ══════════════════════════════════════════════════════════════ */
-
-/* Mezcla aleatoria (Fisher-Yates) */
-function shuffle(arr) {
-  const a = [...arr];
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a;
-}
-
-function renderSuggestions() {
-  renderMovieSuggestions();
-  renderLiveTVSuggestions();
-  // Ocultar sección si no hay contenido
-  document.getElementById('suggestions-movies-wrap').style.display =
-    state.movies.length ? '' : 'none';
-  document.getElementById('suggestions-livetv-wrap').style.display =
-    state.livetv.length ? '' : 'none';
-}
-
-function renderMovieSuggestions() {
-  const row = document.getElementById('suggestions-movies');
-  if (!row) return;
-  row.innerHTML = '';
-  const items = shuffle(state.movies).slice(0, 12);
-  items.forEach((m, i) => {
-    const card = document.createElement('div');
-    card.className = 'sugg-movie-card';
-    card.setAttribute('role', 'listitem');
-    card.setAttribute('tabindex', '-1');
-    card.dataset.idx = i;
-    card.dataset.type = 'movie';
-    const posterHtml = m.poster
-      ? `<img class="sm-poster" src="${m.poster}" alt="" onerror="handleImgError(this)" data-fallback="${m.emoji || '🎬'}" />`
-      : `<div class="sm-poster-fallback">${m.emoji || '🎬'}</div>`;
-    card.innerHTML = `${posterHtml}<div class="sm-title">${m.name || m.title || ''}</div>`;
-    card.addEventListener('click', () => openDetailModal('movie', m));
-    row.appendChild(card);
-  });
-  // guardar items shuffle para navegación
-  state._suggMovies = items;
-  state.suggMovieIdx = 0;
-}
-
-function renderLiveTVSuggestions() {
-  const row = document.getElementById('suggestions-livetv');
-  if (!row) return;
-  row.innerHTML = '';
-  const items = shuffle(state.livetv).slice(0, 12);
-  items.forEach((ch, i) => {
-    const card = document.createElement('div');
-    card.className = 'sugg-ch-card';
-    card.setAttribute('role', 'listitem');
-    card.setAttribute('tabindex', '-1');
-    card.dataset.idx = i;
-    card.dataset.type = 'livetv';
-    const logoHtml = ch.logo
-      ? `<img class="ch-logo" src="${ch.logo}" alt="" onerror="handleImgError(this)" data-fallback="${ch.emoji || '📺'}" />`
-      : `<span class="ch-logo-fallback">${ch.emoji || '📺'}</span>`;
-    card.innerHTML = `${logoHtml}<div class="ch-name">${ch.name || ''}</div>`;
-    card.addEventListener('click', () => openDetailModal('livetv', ch));
-    row.appendChild(card);
-  });
-  state._suggLivetv = items;
-  state.suggLivetvIdx = 0;
-}
-
-function setFocusZone(zone) {
-  state.focusZone = zone;
-  // Quitar foco visual de todas las tiles del dock
-  getTiles().forEach(t => t.classList.remove('focused'));
-  // Quitar foco de todas las sugg cards
-  document.querySelectorAll('.sugg-movie-card, .sugg-ch-card').forEach(c => c.classList.remove('focused'));
-
-  if (zone === 'dock') {
-    updateTileFocus();
-  } else if (zone === 'movies') {
-    state.suggMovieIdx = state.suggMovieIdx || 0;
-    updateSuggFocus('movies');
-  } else if (zone === 'livetv') {
-    state.suggLivetvIdx = state.suggLivetvIdx || 0;
-    updateSuggFocus('livetv');
-  }
-}
-
-function moveSuggFocus(zone, dir) {
-  if (zone === 'movies') {
-    const cards = [...document.querySelectorAll('#suggestions-movies .sugg-movie-card')];
-    state.suggMovieIdx = Math.max(0, Math.min(state.suggMovieIdx + dir, cards.length - 1));
-    updateSuggFocus('movies');
-  } else if (zone === 'livetv') {
-    const cards = [...document.querySelectorAll('#suggestions-livetv .sugg-ch-card')];
-    state.suggLivetvIdx = Math.max(0, Math.min(state.suggLivetvIdx + dir, cards.length - 1));
-    updateSuggFocus('livetv');
-  }
-}
-
-function updateSuggFocus(zone) {
-  if (zone === 'movies') {
-    const cards = [...document.querySelectorAll('#suggestions-movies .sugg-movie-card')];
-    cards.forEach((c, i) => c.classList.toggle('focused', i === state.suggMovieIdx));
-  } else if (zone === 'livetv') {
-    const cards = [...document.querySelectorAll('#suggestions-livetv .sugg-ch-card')];
-    cards.forEach((c, i) => c.classList.toggle('focused', i === state.suggLivetvIdx));
-  }
-}
-
-function openDetailForFocused(zone) {
-  if (zone === 'movies' && state._suggMovies) {
-    openDetailModal('movie', state._suggMovies[state.suggMovieIdx]);
-  } else if (zone === 'livetv' && state._suggLivetv) {
-    openDetailModal('livetv', state._suggLivetv[state.suggLivetvIdx]);
-  }
-}
-
-/* ══════════════════════════════════════════════════════════════
-   DETAIL MODAL
-   ══════════════════════════════════════════════════════════════ */
-function initDetailModal() {
-  document.getElementById('detail-close-btn').addEventListener('click', closeDetailModal);
-  document.getElementById('detail-play-btn').addEventListener('click', () => {
-    const item = state._detailItem;
-    const type = state._detailType;
-    if (!item || !type) return;
-    closeDetailModal();
-    playStream(item.url, item.name || item.title || '');
-  });
-}
-
-function openDetailModal(type, item) {
-  state._detailType = type;
-  state._detailItem = item;
-
-  const overlay = document.getElementById('detail-overlay');
-  const badge   = document.getElementById('detail-badge');
-  const title   = document.getElementById('detail-title');
-  const meta    = document.getElementById('detail-meta');
-  const desc    = document.getElementById('detail-desc');
-  const poster  = document.getElementById('detail-poster');
-  const playBtn = document.getElementById('detail-play-btn');
-
-  if (type === 'livetv') {
-    badge.classList.remove('hidden');
-    poster.innerHTML = item.logo
-      ? `<img src="${item.logo}" alt="" style="width:100%;height:100%;object-fit:contain;" onerror="this.parentElement.textContent='${item.emoji||'📺'}'">`
-      : (item.emoji || '📺');
-    title.textContent = item.name || '';
-    meta.textContent  = item.group || item.category || 'Canal en vivo';
-    desc.textContent  = item.description || 'Canal de televisión en vivo.';
-    playBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg> Ver ahora';
-  } else {
-    badge.classList.add('hidden');
-    poster.innerHTML = item.poster
-      ? `<img src="${item.poster}" alt="" style="width:100%;height:100%;object-fit:cover;" onerror="this.parentElement.textContent='${item.emoji||'🎬'}'">`
-      : (item.emoji || '🎬');
-    title.textContent = item.name || item.title || '';
-    meta.textContent  = [item.year, item.genre, item.duration].filter(Boolean).join(' · ') || 'Película';
-    desc.textContent  = item.description || '';
-    playBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg> Reproducir';
-  }
-
-  overlay.classList.remove('hidden');
-  document.getElementById('detail-play-btn').focus();
-}
-
-function closeDetailModal() {
-  document.getElementById('detail-overlay').classList.add('hidden');
-  state._detailItem = null;
-  state._detailType = null;
 }
 function handleSettingsKey(key) { if (key === 'Backspace' || key === 'Escape') { playSnd('nav'); navigateTo('home'); } }
 function handleAppKey(key) { if (key === 'Backspace' || key === 'Escape') { playSnd('nav'); stopAll(); navigateTo('home'); } }
@@ -465,7 +240,7 @@ function navigateTo(screenId, title, renderFn) {
   const tb = document.getElementById('topbar-title');
   if (tb) tb.textContent = title || 'Inicio';
   if (renderFn) renderFn();
-  if (screenId === 'home') setTimeout(() => { state.focusZone = 'dock'; focusTile(state.focusIndex); }, 350);
+  if (screenId === 'home') setTimeout(() => focusTile(state.focusIndex), 350);
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -533,54 +308,10 @@ function handleModalKey(e) {
 /* ══════════════════════════════════════════════════════════════
    HLS.js PLAYER (shared for Live TV & Movies)
    ══════════════════════════════════════════════════════════════ */
-const PLAYER_BTN_STYLE = 'background:rgba(255,255,255,0.12);border:none;color:#fff;' +
-  'font-size:1.05rem;width:38px;height:38px;border-radius:50%;cursor:pointer;' +
-  'display:flex;align-items:center;justify-content:center;transition:background 0.15s;flex-shrink:0;';
-
 function stopHLS() {
   if (state.hlsInstance) { state.hlsInstance.destroy(); state.hlsInstance = null; }
   const v = document.getElementById('hls-video');
   if (v) { v.pause(); v.src = ''; }
-}
-
-function enterPlayerFullscreen(el) {
-  try {
-    const req = el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen || el.msRequestFullscreen;
-    if (!req) return;
-    const p = req.call(el);
-    if (p && typeof p.catch === 'function') p.catch(() => {});
-  } catch {}
-}
-
-function exitPlayerFullscreen() {
-  try {
-    if (!document.fullscreenElement && !document.webkitFullscreenElement) return;
-    const exit = document.exitFullscreen || document.webkitExitFullscreen || document.mozCancelFullScreen || document.msExitFullscreen;
-    if (!exit) return;
-    const p = exit.call(document);
-    if (p && typeof p.catch === 'function') p.catch(() => {});
-  } catch {}
-}
-
-function closePlayer() {
-  stopHLS();
-  exitPlayerFullscreen();
-  const overlay = document.getElementById('player-overlay');
-  if (overlay) overlay.remove();
-  document.addEventListener('keydown', handleKey);
-}
-
-// Si el usuario sale de fullscreen por fuera de nuestros controles (Esc del
-// navegador, gesto del control remoto del TV), cerramos el player prolijamente.
-document.addEventListener('fullscreenchange', () => {
-  if (!document.fullscreenElement && document.getElementById('player-overlay')) closePlayer();
-});
-
-function formatPlayerTime(s) {
-  if (!isFinite(s) || isNaN(s) || s < 0) return '0:00';
-  const m = Math.floor(s / 60);
-  const sec = Math.floor(s % 60);
-  return `${m}:${String(sec).padStart(2, '0')}`;
 }
 
 function playStream(url, title) {
@@ -591,7 +322,6 @@ function playStream(url, title) {
   if (!overlay) {
     overlay = document.createElement('div');
     overlay.id = 'player-overlay';
-    overlay.tabIndex = -1;
     overlay.style.cssText = `
       position:fixed;inset:0;z-index:9000;background:#000;
       display:flex;flex-direction:column;
@@ -605,159 +335,69 @@ function playStream(url, title) {
       ">
         <button id="player-back" style="
           background:rgba(255,255,255,0.12);border:none;color:#fff;
-          font-size:1rem;padding:8px 14px;border-radius:8px;cursor:pointer;
-          display:flex;align-items:center;gap:6px;
+          font-size:1.1rem;padding:8px 14px;border-radius:8px;cursor:pointer;
         ">← Atrás</button>
         <span id="player-title" style="color:#fff;font-size:1rem;font-weight:600;"></span>
         <span id="player-live-badge" style="
-          background:linear-gradient(135deg,#7c6af7,#3ecfcf);color:#fff;padding:3px 10px;
-          border-radius:20px;font-size:0.7rem;font-weight:700;letter-spacing:0.03em;
+          background:rgba(239,68,68,0.8);color:#fff;padding:3px 10px;
+          border-radius:20px;font-size:0.7rem;font-weight:700;
         ">● LIVE</span>
         <div style="flex:1"></div>
-        <span id="player-status" style="color:rgba(255,255,255,0.6);font-size:0.75rem;"></span>
+        <span id="player-status" style="color:rgba(255,255,255,0.5);font-size:0.75rem;"></span>
       </div>
-
-      <video id="hls-video" style="width:100%;height:100%;object-fit:contain;background:#000;" playsinline></video>
-
+      <video id="hls-video" style="width:100%;height:100%;object-fit:contain;" playsinline></video>
       <div id="player-loading" style="
         position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
-        background:rgba(0,0,0,0.6);z-index:3;pointer-events:none;
+        background:rgba(0,0,0,0.6);z-index:3;
       ">
         <div style="text-align:center;color:#fff;">
-          <div style="
-            width:46px;height:46px;border-radius:50%;margin:0 auto 14px;
-            border:3px solid rgba(255,255,255,0.15);border-top-color:#7c6af7;
-            animation:player-spin 0.9s linear infinite;
-          "></div>
-          <div style="font-size:0.85rem;opacity:0.7;">Cargando stream…</div>
+          <div style="font-size:2.5rem;margin-bottom:12px;">⏳</div>
+          <div style="font-size:0.9rem;opacity:0.7;">Cargando stream…</div>
         </div>
       </div>
-
-      <div id="player-controls" style="
-        position:absolute;bottom:0;left:0;right:0;z-index:2;
-        display:flex;flex-direction:column;gap:6px;
-        padding:8px 20px 16px;
-        background:linear-gradient(to top, rgba(0,0,0,0.88), transparent);
-        transition:opacity 0.3s;
-      ">
-        <div id="player-seek-row" style="display:none;align-items:center;gap:10px;">
-          <span id="player-time-current" style="color:#fff;font-size:0.72rem;min-width:36px;font-variant-numeric:tabular-nums;">0:00</span>
-          <input type="range" id="player-seek" min="0" max="100" value="0" step="0.1" style="flex:1;height:4px;cursor:pointer;accent-color:#7c6af7;" />
-          <span id="player-time-duration" style="color:#fff;font-size:0.72rem;min-width:36px;font-variant-numeric:tabular-nums;">0:00</span>
-        </div>
-        <div style="display:flex;align-items:center;gap:10px;">
-          <button id="player-playpause" style="${PLAYER_BTN_STYLE}">⏸</button>
-          <button id="player-mute" style="${PLAYER_BTN_STYLE}">🔊</button>
-          <input type="range" id="player-volume" min="0" max="1" value="1" step="0.05" style="width:70px;height:4px;cursor:pointer;accent-color:#3ecfcf;" />
-          <div style="flex:1"></div>
-          <button id="player-fullscreen" style="${PLAYER_BTN_STYLE}">⛶</button>
-        </div>
-      </div>
-
-      <style>
-        @keyframes player-spin { to { transform: rotate(360deg); } }
-        #player-seek, #player-volume { -webkit-appearance:none; appearance:none; background:rgba(255,255,255,0.25); border-radius:2px; outline:none; }
-        #player-seek::-webkit-slider-thumb, #player-volume::-webkit-slider-thumb { -webkit-appearance:none; width:13px; height:13px; border-radius:50%; background:#fff; cursor:pointer; margin-top:-4.5px; }
-        #player-back:hover, #player-playpause:hover, #player-mute:hover, #player-fullscreen:hover { background:rgba(255,255,255,0.22); }
-      </style>
     `;
     document.body.appendChild(overlay);
 
-    const backBtn      = document.getElementById('player-back');
-    const playPauseBtn = document.getElementById('player-playpause');
-    const muteBtn       = document.getElementById('player-mute');
-    const volumeSlider  = document.getElementById('player-volume');
-    const seekSlider     = document.getElementById('player-seek');
-    const seekRow        = document.getElementById('player-seek-row');
-    const fsBtn          = document.getElementById('player-fullscreen');
-    const videoEl         = document.getElementById('hls-video');
-
-    backBtn.onclick = closePlayer;
-
-    const togglePlayPause = () => { videoEl.paused ? videoEl.play().catch(() => {}) : videoEl.pause(); };
-    playPauseBtn.onclick = togglePlayPause;
-    videoEl.addEventListener('click', togglePlayPause);
-    videoEl.addEventListener('play',  () => { playPauseBtn.textContent = '⏸'; });
-    videoEl.addEventListener('pause', () => { playPauseBtn.textContent = '▶'; });
-
-    muteBtn.onclick = () => {
-      videoEl.muted = !videoEl.muted;
-      muteBtn.textContent = (videoEl.muted || videoEl.volume === 0) ? '🔇' : '🔊';
-    };
-    volumeSlider.oninput = () => {
-      videoEl.volume = parseFloat(volumeSlider.value);
-      videoEl.muted  = videoEl.volume === 0;
-      muteBtn.textContent = videoEl.muted ? '🔇' : '🔊';
+    document.getElementById('player-back').onclick = () => {
+      stopHLS();
+      overlay.remove();
+      document.addEventListener('keydown', handleKey);
     };
 
-    seekSlider.addEventListener('input', () => {
-      if (isFinite(videoEl.duration) && videoEl.duration > 0) {
-        videoEl.currentTime = (seekSlider.value / 100) * videoEl.duration;
-      }
-    });
-    videoEl.addEventListener('timeupdate', () => {
-      if (isFinite(videoEl.duration) && videoEl.duration > 0) {
-        seekSlider.value = (videoEl.currentTime / videoEl.duration) * 100;
-        document.getElementById('player-time-current').textContent = formatPlayerTime(videoEl.currentTime);
-      }
-    });
-    videoEl.addEventListener('loadedmetadata', () => {
-      const isVOD = isFinite(videoEl.duration) && videoEl.duration > 0;
-      seekRow.style.display = isVOD ? 'flex' : 'none';
-      if (isVOD) document.getElementById('player-time-duration').textContent = formatPlayerTime(videoEl.duration);
-    });
-
-    fsBtn.onclick = () => {
-      if (document.fullscreenElement || document.webkitFullscreenElement) exitPlayerFullscreen();
-      else enterPlayerFullscreen(overlay);
-    };
-
-    // Auto-hide de topbar y controles inferiores con inactividad
+    // Hide controls on mouse idle
     let hideTimer;
-    function showChrome() {
-      document.getElementById('player-topbar').style.opacity   = '1';
-      document.getElementById('player-controls').style.opacity = '1';
+    overlay.addEventListener('mousemove', () => {
+      document.getElementById('player-topbar').style.opacity = '1';
       clearTimeout(hideTimer);
       hideTimer = setTimeout(() => {
-        document.getElementById('player-topbar').style.opacity   = '0';
-        document.getElementById('player-controls').style.opacity = '0';
-      }, 3500);
-    }
-    overlay.addEventListener('mousemove', showChrome);
-    overlay.addEventListener('click', showChrome);
-    showChrome();
+        document.getElementById('player-topbar').style.opacity = '0';
+      }, 3000);
+    });
 
     // Keyboard inside player
     document.removeEventListener('keydown', handleKey);
     overlay.addEventListener('keydown', e => {
-      showChrome();
-      if (e.key === 'Escape' || e.key === 'Backspace') { e.preventDefault(); closePlayer(); return; }
-      if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); togglePlayPause(); }
-      if (e.key === 'ArrowRight' && isFinite(videoEl.duration)) videoEl.currentTime = Math.min(videoEl.currentTime + 10, videoEl.duration);
-      if (e.key === 'ArrowLeft'  && isFinite(videoEl.duration)) videoEl.currentTime = Math.max(videoEl.currentTime - 10, 0);
+      if (e.key === 'Escape' || e.key === 'Backspace') {
+        stopHLS(); overlay.remove();
+        document.addEventListener('keydown', handleKey);
+      }
+      if (e.key === ' ' || e.key === 'Enter') {
+        const v = document.getElementById('hls-video');
+        v?.paused ? v.play() : v?.pause();
+      }
     });
   }
 
-  document.getElementById('player-title').textContent  = title || '';
+  document.getElementById('player-title').textContent = title || '';
   document.getElementById('player-status').textContent = '';
-  document.getElementById('player-seek-row').style.display = 'none'; // se muestra de nuevo en loadedmetadata si es VOD
-  document.getElementById('player-playpause').textContent  = '⏸';
-  document.getElementById('player-mute').textContent       = '🔊';
-  document.getElementById('player-volume').value = 1;
 
   const video   = document.getElementById('hls-video');
   const loading = document.getElementById('player-loading');
   const status  = document.getElementById('player-status');
 
-  video.volume = 1;
-  video.muted  = false;
-
   video.addEventListener('playing', () => { loading.style.display = 'none'; }, { once: true });
   video.addEventListener('waiting', () => { loading.style.display = 'flex'; });
   video.addEventListener('canplay', () => { loading.style.display = 'none'; });
-
-  // Fullscreen real del navegador (oculta la barra de direcciones del TV)
-  enterPlayerFullscreen(overlay);
 
   // Detectar tipo de stream:
   //  - .m3u8  -> HLS.js / HLS nativo (Safari, smart TVs)
@@ -1132,7 +772,7 @@ function initSettingsListeners() {
   backBtn._init = true;
   backBtn.addEventListener('click', () => navigateTo('home', 'Inicio'));
   saveBtn.addEventListener('click', () => {
-    state.systemName   = document.getElementById('setting-system-name').value.trim() || 'MythOS TV';
+    state.systemName   = document.getElementById('setting-system-name').value.trim() || 'MyTV OS';
     state.wallpaper    = document.getElementById('setting-wallpaper').value;
     state.glassEnabled = document.getElementById('setting-glass').checked;
     state.soundEnabled = document.getElementById('setting-sound').checked;
@@ -1257,8 +897,8 @@ function showToast(msg, dur = 2500) {
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('service-worker.js')
-      .then(reg => console.log('[MythOS TV] SW:', reg.scope))
-      .catch(err => console.warn('[MythOS TV] SW error:', err));
+      .then(reg => console.log('[MyTV OS] SW:', reg.scope))
+      .catch(err => console.warn('[MyTV OS] SW error:', err));
   });
 }
 

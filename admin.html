@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>MyTV OS — Admin</title>
+  <title>MythOS TV — Admin</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Orbitron:wght@400;700&display=swap" rel="stylesheet" />
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -163,7 +163,7 @@
 <!-- ══════════ LOGIN ══════════ -->
 <div id="login-screen">
   <div class="login-box">
-    <div class="login-brand">MyTV OS</div>
+    <div class="login-brand">MythOS TV</div>
     <div class="login-subtitle">Panel de Administración</div>
     <div class="login-field"><label>Usuario</label><input type="text" id="l-user" value="admin" /></div>
     <div class="login-field"><label>Contraseña</label><input type="password" id="l-pass" placeholder="••••••••" /></div>
@@ -175,7 +175,7 @@
 <!-- ══════════ MAIN ══════════ -->
 <div id="main-screen">
   <header class="topbar">
-    <span class="topbar-brand">MyTV OS</span>
+    <span class="topbar-brand">MythOS TV</span>
     <div class="topbar-div"></div>
     <span class="topbar-title">Admin Panel</span>
     <div class="topbar-spacer"></div>
@@ -209,7 +209,7 @@
 
       <!-- DASHBOARD -->
       <section class="page active" id="page-dashboard">
-        <div class="page-header"><div><div class="page-title">Dashboard</div><div class="page-subtitle">Estado de MyTV OS</div></div></div>
+        <div class="page-header"><div><div class="page-title">Dashboard</div><div class="page-subtitle">Estado de MythOS TV</div></div></div>
         <div class="stats-row">
           <div class="stat-card"><div class="stat-value c-cyan" id="stat-livetv">—</div><div class="stat-label">Canales Live TV</div></div>
           <div class="stat-card"><div class="stat-value c-orange" id="stat-movies">—</div><div class="stat-label">Películas VOD</div></div>
@@ -235,7 +235,7 @@
         <div class="sys-grid">
           <div class="card">
             <div class="card-title"><span class="dot"></span> Identidad</div>
-            <div class="form-group"><label>Nombre del sistema</label><input type="text" id="sys-name" placeholder="MyTV OS" /></div>
+            <div class="form-group"><label>Nombre del sistema</label><input type="text" id="sys-name" placeholder="MythOS TV" /></div>
           </div>
           <div class="card">
             <div class="card-title"><span class="dot"></span> Apariencia</div>
@@ -261,8 +261,8 @@
         <div class="page-header"><div><div class="page-title">Launcher Apps</div><div class="page-subtitle">Apps en la pantalla principal</div></div><div class="header-actions"><button class="btn btn-secondary" onclick="addLauncherRow()">➕ Nueva</button><button class="btn btn-primary" onclick="saveAll('launcher')">💾 Guardar</button></div></div>
         <div class="card">
           <div class="card-title"><span class="dot"></span> Apps</div>
-          <div style="display:grid;grid-template-columns:48px 1fr 90px 1fr 80px 70px 36px;gap:8px;padding:0 12px 8px;font-size:0.65rem;font-weight:700;letter-spacing:0.07em;color:var(--muted2);text-transform:uppercase;">
-            <span>Emoji</span><span>Nombre</span><span>Tipo</span><span>URL / Screen</span><span>Color</span><span>Badge</span><span></span>
+          <div style="display:grid;grid-template-columns:48px 1fr 90px 1fr 1fr 80px 70px 36px;gap:8px;padding:0 12px 8px;font-size:0.65rem;font-weight:700;letter-spacing:0.07em;color:var(--muted2);text-transform:uppercase;">
+            <span>Emoji</span><span>Nombre</span><span>Tipo</span><span>URL / Screen</span><span>URL Logo</span><span>Color</span><span>Badge</span><span></span>
           </div>
           <div class="item-list" id="launcher-list"></div>
           <button class="btn btn-secondary btn-sm" onclick="addLauncherRow()" style="margin-top:4px;">➕ Agregar</button>
@@ -274,8 +274,8 @@
         <div class="page-header"><div><div class="page-title">Live TV</div><div class="page-subtitle">Canales en vivo — m3u8, TS, HLS</div></div><div class="header-actions"><button class="btn btn-secondary" onclick="addRow('livetv')">➕ Canal</button><button class="btn btn-primary" onclick="saveAll('livetv')">💾 Guardar</button></div></div>
         <div class="card">
           <div class="card-title"><span class="dot"></span> Canales <span class="tag" id="livetv-count">0</span></div>
-          <div style="display:grid;grid-template-columns:48px 1fr 130px 1fr 36px;gap:8px;padding:0 12px 8px;font-size:0.65rem;font-weight:700;letter-spacing:0.07em;color:var(--muted2);text-transform:uppercase;">
-            <span>Emoji</span><span>Nombre</span><span>Categoría</span><span>URL Stream</span><span></span>
+          <div style="display:grid;grid-template-columns:48px 1fr 130px 1fr 1fr 36px;gap:8px;padding:0 12px 8px;font-size:0.65rem;font-weight:700;letter-spacing:0.07em;color:var(--muted2);text-transform:uppercase;">
+            <span>Emoji</span><span>Nombre</span><span>Categoría</span><span>URL Stream</span><span>URL Logo</span><span></span>
           </div>
           <div class="item-list" id="livetv-list"></div>
           <button class="btn btn-secondary btn-sm" onclick="addRow('livetv')" style="margin-top:4px;">➕ Agregar canal</button>
@@ -287,8 +287,8 @@
         <div class="page-header"><div><div class="page-title">Películas / VOD</div><div class="page-subtitle">Contenido bajo demanda</div></div><div class="header-actions"><button class="btn btn-secondary" onclick="addRow('movies')">➕ Película</button><button class="btn btn-primary" onclick="saveAll('movies')">💾 Guardar</button></div></div>
         <div class="card">
           <div class="card-title"><span class="dot"></span> Contenido VOD <span class="tag" id="movies-count">0</span></div>
-          <div style="display:grid;grid-template-columns:48px 1fr 130px 1fr 36px;gap:8px;padding:0 12px 8px;font-size:0.65rem;font-weight:700;letter-spacing:0.07em;color:var(--muted2);text-transform:uppercase;">
-            <span>Emoji</span><span>Título</span><span>Categoría</span><span>URL</span><span></span>
+          <div style="display:grid;grid-template-columns:48px 1fr 130px 1fr 1fr 36px;gap:8px;padding:0 12px 8px;font-size:0.65rem;font-weight:700;letter-spacing:0.07em;color:var(--muted2);text-transform:uppercase;">
+            <span>Emoji</span><span>Título</span><span>Categoría</span><span>URL</span><span>URL Carátula</span><span></span>
           </div>
           <div class="item-list" id="movies-list"></div>
           <button class="btn btn-secondary btn-sm" onclick="addRow('movies')" style="margin-top:4px;">➕ Agregar</button>
@@ -509,7 +509,7 @@ function renderDash() {
   document.getElementById('stat-radio').textContent  = CFG.radio?.length   || 0;
   document.getElementById('stat-apps').textContent   = CFG.launcher?.length|| 0;
   document.getElementById('dash-info').innerHTML = `
-    <span>🏷️ Nombre: <strong>${CFG.systemName || 'MyTV OS'}</strong></span><br/>
+    <span>🏷️ Nombre: <strong>${CFG.systemName || 'MythOS TV'}</strong></span><br/>
     <span>🎨 Wallpaper: <strong>${CFG.wallpaper || 'default'}</strong></span><br/>
     <span>🔊 Sonidos: <strong>${CFG.soundEnabled !== false ? 'Activos' : 'Desactivados'}</strong></span><br/>
     <span>🌫️ Glassmorphism: <strong>${CFG.glassEnabled !== false ? 'Activo' : 'Desactivado'}</strong></span>
@@ -521,7 +521,7 @@ function renderDash() {
    ══════════════════════════════════════════ */
 function renderSystem() {
   if (!CFG) return;
-  document.getElementById('sys-name').value      = CFG.systemName || 'MyTV OS';
+  document.getElementById('sys-name').value      = CFG.systemName || 'MythOS TV';
   document.getElementById('sys-wallpaper').value = CFG.wallpaper  || 'default';
   document.getElementById('sys-glass').checked   = CFG.glassEnabled !== false;
   document.getElementById('sys-sound').checked   = CFG.soundEnabled !== false;
@@ -534,7 +534,7 @@ async function saveAll(section) {
   if (!CFG) return;
 
   if (section === 'system') {
-    CFG.systemName   = document.getElementById('sys-name').value.trim() || 'MyTV OS';
+    CFG.systemName   = document.getElementById('sys-name').value.trim() || 'MythOS TV';
     CFG.wallpaper    = document.getElementById('sys-wallpaper').value;
     CFG.glassEnabled = document.getElementById('sys-glass').checked;
     CFG.soundEnabled = document.getElementById('sys-sound').checked;
@@ -564,7 +564,7 @@ function renderLauncher() {
   apps.forEach((app, i) => {
     const row = document.createElement('div');
     row.className = 'item-row';
-    row.style.gridTemplateColumns = '48px 1fr 90px 1fr 80px 70px 36px';
+    row.style.gridTemplateColumns = '48px 1fr 90px 1fr 1fr 80px 70px 36px';
     row.dataset.index = i;
     row.innerHTML = `
       <input class="item-emoji" type="text" value="${app.emoji||'🆕'}" maxlength="4" data-f="emoji" />
@@ -574,6 +574,7 @@ function renderLauncher() {
         <option value="internal" ${app.type==='internal'?'selected':''}>Interno</option>
       </select>
       <input type="text" placeholder="URL o screen" value="${esc(app.url||app.screen||'')}" data-f="urlscreen" />
+      <input type="url" placeholder="https://logo.png (opcional)" value="${esc(app.logo||'')}" data-f="logo" style="font-family:monospace;font-size:0.72rem;" />
       <div><div class="chips" data-f="color">${COLORS.map(c=>`<div class="chip ${app.color===c?'sel':''}" data-c="${c}" onclick="selChip(this)"></div>`).join('')}</div></div>
       <input type="text" placeholder="Badge" value="${esc(app.badge||'')}" data-f="badge" style="font-size:0.72rem;" />
       <button class="btn btn-danger btn-icon btn-sm" onclick="removeRow('launcher',${i})">✕</button>
@@ -590,7 +591,7 @@ function selChip(chip) {
 function addLauncherRow() {
   if (!CFG) return;
   CFG.launcher = getLauncherFromDOM();
-  CFG.launcher.push({ id:'app-'+Date.now(), label:'Nueva App', sublabel:'', emoji:'🆕', type:'external', url:'', color:'purple', badge:'' });
+  CFG.launcher.push({ id:'app-'+Date.now(), label:'Nueva App', sublabel:'', emoji:'🆕', logo:'', type:'external', url:'', color:'purple', badge:'' });
   renderLauncher();
 }
 
@@ -605,6 +606,7 @@ function getLauncherFromDOM() {
       label:    row.querySelector('[data-f="label"]').value,
       sublabel: existing.sublabel || '',
       emoji:    row.querySelector('[data-f="emoji"]').value,
+      logo:     row.querySelector('[data-f="logo"]').value,
       type,
       url:    type === 'external' ? urlscreen : (existing.url || ''),
       screen: type === 'internal' ? urlscreen : (existing.screen || ''),
@@ -618,8 +620,8 @@ function getLauncherFromDOM() {
    GENERIC LIST (livetv, movies, radio)
    ══════════════════════════════════════════ */
 const LIST_CFG = {
-  livetv: { cols:'48px 1fr 130px 1fr 36px', fields:['emoji','name','cat','url'], defaults:{ emoji:'📡', name:'Canal Nuevo', cat:'General', url:'' } },
-  movies: { cols:'48px 1fr 130px 1fr 36px', fields:['emoji','name','cat','url'], defaults:{ emoji:'🎬', name:'Nueva Película', cat:'Película', url:'' } },
+  livetv: { cols:'48px 1fr 130px 1fr 1fr 36px', fields:['emoji','name','cat','url','logo'], defaults:{ emoji:'📡', name:'Canal Nuevo', cat:'General', url:'', logo:'' } },
+  movies: { cols:'48px 1fr 130px 1fr 1fr 36px', fields:['emoji','name','cat','url','poster'], defaults:{ emoji:'🎬', name:'Nueva Película', cat:'Película', url:'', poster:'' } },
   radio:  { cols:'48px 1fr 100px 1fr 36px', fields:['emoji','name','genre','url'], defaults:{ emoji:'📻', name:'Nueva Estación', genre:'Otro', url:'' } },
 };
 
@@ -639,6 +641,7 @@ function renderList(type) {
     row.innerHTML = lc.fields.map(f => {
       if (f === 'emoji') return `<input class="item-emoji" type="text" value="${esc(item[f]||'📡')}" maxlength="4" data-f="${f}" />`;
       if (f === 'url')   return `<input type="url" placeholder="https://stream.url" value="${esc(item[f]||'')}" data-f="${f}" style="font-family:monospace;font-size:0.75rem;" />`;
+      if (f === 'logo' || f === 'poster') return `<input type="url" placeholder="https://imagen.url/logo.png" value="${esc(item[f]||'')}" data-f="${f}" style="font-family:monospace;font-size:0.75rem;" />`;
       return `<input type="text" placeholder="${f}" value="${esc(item[f]||'')}" data-f="${f}" />`;
     }).join('') + `<button class="btn btn-danger btn-icon btn-sm" onclick="removeRow('${type}',${i})">✕</button>`;
     list.appendChild(row);
@@ -717,6 +720,7 @@ function processM3U(text) {
   for (const line of lines) {
     if (line.startsWith('#EXTINF:')) {
       const tvgName = line.match(/tvg-name="([^"]+)"/);
+      const tvgLogo = line.match(/tvg-logo="([^"]+)"/);
       const group   = line.match(/group-title="([^"]+)"/);
       const nameEnd = line.match(/,(.+)$/);
       cur = {
@@ -724,6 +728,8 @@ function processM3U(text) {
         cat:   (group?.[1] || 'General').trim(),
         emoji: '📡',
         url:   '',
+        logo:   tvgLogo?.[1] || '',
+        poster: tvgLogo?.[1] || '',
       };
     } else if (cur && /^https?:|^rtmp:|^rtp:/.test(line)) {
       cur.url = line;
@@ -742,7 +748,7 @@ function processM3U(text) {
   count.textContent  = _m3uParsed.length;
   list.innerHTML = _m3uParsed.slice(0,60).map(ch => `
     <div class="item-row" style="grid-template-columns:48px 1fr 130px 1fr;font-size:0.78rem;">
-      <span style="text-align:center;font-size:1.1rem;">${ch.emoji}</span>
+      <span style="text-align:center;font-size:1.1rem;">${ch.logo ? `<img src="${ch.logo}" style="width:28px;height:28px;object-fit:contain;border-radius:4px;" onerror="this.outerHTML='${ch.emoji}'" />` : ch.emoji}</span>
       <span>${esc(ch.name)}</span>
       <span style="color:var(--muted)">${esc(ch.cat)}</span>
       <span style="font-family:monospace;font-size:0.7rem;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(ch.url)}</span>
@@ -847,7 +853,7 @@ function exportConfig() {
   const blob = new Blob([JSON.stringify(CFG, null, 2)], { type:'application/json' });
   const a    = document.createElement('a');
   a.href     = URL.createObjectURL(blob);
-  a.download = `mytv-os-backup-${new Date().toISOString().slice(0,10)}.json`;
+  a.download = `mythos-tv-backup-${new Date().toISOString().slice(0,10)}.json`;
   a.click();
   toast('📤 Backup descargado');
 }

@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════
-   MyTV OS — server.js
+   MythOS TV — server.js
    Backend Express: sirve config global, protege admin, proxy M3U
    Puerto: 3000 (Nginx hace proxy desde /api/)
    ═══════════════════════════════════════════════════════════════ */
@@ -12,6 +12,8 @@ const path     = require('path');
 const crypto   = require('crypto');
 const https    = require('https');
 const http     = require('http');
+const dns      = require('dns');
+const net      = require('net');
 
 const app  = express();
 const PORT = 3000;
@@ -26,7 +28,7 @@ if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
 // ── Default config ───────────────────────────────────────────────
 const DEFAULT_CONFIG = {
-  systemName:   'MyTV OS',
+  systemName:   'MythOS TV',
   wallpaper:    'default',
   glassEnabled: true,
   soundEnabled: true,
@@ -144,7 +146,7 @@ app.get('/api/admin/fetch-m3u', async (req, res) => {
 
   try {
     const proto = url.startsWith('https') ? https : http;
-    proto.get(url, { headers: { 'User-Agent': 'MyTV-OS/1.0' } }, (upstream) => {
+    proto.get(url, { headers: { 'User-Agent': 'MythOS-TV/1.0' } }, (upstream) => {
       res.setHeader('Content-Type', 'text/plain; charset=utf-8');
       upstream.pipe(res);
     }).on('error', e => res.status(500).json({ error: e.message }));
@@ -155,17 +157,37 @@ app.get('/api/admin/fetch-m3u', async (req, res) => {
 
 // ── PUBLIC: Proxy de stream (resuelve CORS para .mp4/.m3u8 externos) ──
 // NOTA: NO usa checkAuth — lo llama el player de cualquier TV/dispositivo,
-// no solo el panel admin. La seguridad acá es la whitelist de hosts.
-const ALLOWED_PROXY_HOSTS = [
-  'objectstorage.oracle.com',
-  'archive.org',
-  'us.archive.org',
-  'ia801409.us.archive.org', // ejemplos archive.org — ajustar según tus listas reales
-  'ia800504.us.archive.org',
-];
+// no solo el panel admin. No hay whitelist de hosts (jala cualquier URL
+// pública de tus listas M3U); la única protección es bloquear IPs
+// privadas/internas para que el proxy no se pueda usar contra tu propia
+// red interna o el endpoint de metadata de la nube (169.254.169.254, etc).
+function isPrivateIP(ip) {
+  if (net.isIPv4(ip)) {
+    const p = ip.split('.').map(Number);
+    if (p[0] === 10) return true;
+    if (p[0] === 172 && p[1] >= 16 && p[1] <= 31) return true;
+    if (p[0] === 192 && p[1] === 168) return true;
+    if (p[0] === 127) return true;
+    if (p[0] === 169 && p[1] === 254) return true; // link-local + metadata cloud
+    if (p[0] === 0) return true;
+    return false;
+  }
+  if (net.isIPv6(ip)) {
+    const l = ip.toLowerCase();
+    if (l === '::1') return true;
+    if (l.startsWith('fc') || l.startsWith('fd')) return true; // unique local
+    if (l.startsWith('fe80')) return true; // link-local
+    return false;
+  }
+  return true; // si no se puede determinar, bloquear por precaución
+}
 
-function hostAllowed(hostname) {
-  return ALLOWED_PROXY_HOSTS.some(h => hostname === h || hostname.endsWith('.' + h));
+function hostAllowed(hostname, cb) {
+  if (net.isIP(hostname)) return cb(!isPrivateIP(hostname));
+  dns.lookup(hostname, (err, address) => {
+    if (err) return cb(false);
+    cb(!isPrivateIP(address));
+  });
 }
 
 function proxyStream(targetUrl, req, res, redirectsLeft) {
@@ -173,37 +195,41 @@ function proxyStream(targetUrl, req, res, redirectsLeft) {
   try { parsed = new URL(targetUrl); }
   catch { return res.status(400).json({ error: 'url inválida' }); }
 
-  if (!hostAllowed(parsed.hostname)) {
-    return res.status(403).json({ error: 'host no permitido: ' + parsed.hostname });
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    return res.status(400).json({ error: 'protocolo no soportado' });
   }
 
-  const proto = parsed.protocol === 'https:' ? https : http;
-  const headers = {
-    'User-Agent': 'Mozilla/5.0 (SMART-TV; Linux; Tizen 6.0) AppleWebKit/538.1 (KHTML, like Gecko) Version/6.0 TV Safari/538.1',
-  };
-  if (req.headers.range) headers['Range'] = req.headers.range; // necesario para "seek" en <video>
+  hostAllowed(parsed.hostname, (ok) => {
+    if (!ok) return res.status(403).json({ error: 'host bloqueado (IP privada/interna)' });
 
-  const upstreamReq = proto.get(targetUrl, { headers }, (upstream) => {
-    // Seguir redirecciones (muy común en object storage / CDN)
-    if ([301, 302, 303, 307, 308].includes(upstream.statusCode) && upstream.headers.location && redirectsLeft > 0) {
-      upstream.resume(); // descartar body del redirect
-      const nextUrl = new URL(upstream.headers.location, targetUrl).toString();
-      return proxyStream(nextUrl, req, res, redirectsLeft - 1);
-    }
+    const proto = parsed.protocol === 'https:' ? https : http;
+    const headers = {
+      'User-Agent': 'Mozilla/5.0 (SMART-TV; Linux; Tizen 6.0) AppleWebKit/538.1 (KHTML, like Gecko) Version/6.0 TV Safari/538.1',
+    };
+    if (req.headers.range) headers['Range'] = req.headers.range; // necesario para "seek" en <video>
 
-    res.statusCode = upstream.statusCode;
-    res.setHeader('Content-Type', upstream.headers['content-type'] || 'application/octet-stream');
-    if (upstream.headers['content-length']) res.setHeader('Content-Length', upstream.headers['content-length']);
-    if (upstream.headers['content-range'])  res.setHeader('Content-Range', upstream.headers['content-range']);
-    if (upstream.headers['accept-ranges'])  res.setHeader('Accept-Ranges', upstream.headers['accept-ranges']);
-    upstream.pipe(res);
+    const upstreamReq = proto.get(targetUrl, { headers }, (upstream) => {
+      // Seguir redirecciones (muy común en object storage / CDN)
+      if ([301, 302, 303, 307, 308].includes(upstream.statusCode) && upstream.headers.location && redirectsLeft > 0) {
+        upstream.resume(); // descartar body del redirect
+        const nextUrl = new URL(upstream.headers.location, targetUrl).toString();
+        return proxyStream(nextUrl, req, res, redirectsLeft - 1);
+      }
+
+      res.statusCode = upstream.statusCode;
+      res.setHeader('Content-Type', upstream.headers['content-type'] || 'application/octet-stream');
+      if (upstream.headers['content-length']) res.setHeader('Content-Length', upstream.headers['content-length']);
+      if (upstream.headers['content-range'])  res.setHeader('Content-Range', upstream.headers['content-range']);
+      if (upstream.headers['accept-ranges'])  res.setHeader('Accept-Ranges', upstream.headers['accept-ranges']);
+      upstream.pipe(res);
+    });
+
+    upstreamReq.on('error', (e) => {
+      if (!res.headersSent) res.status(502).json({ error: e.message });
+    });
+
+    req.on('close', () => upstreamReq.destroy());
   });
-
-  upstreamReq.on('error', (e) => {
-    if (!res.headersSent) res.status(502).json({ error: e.message });
-  });
-
-  req.on('close', () => upstreamReq.destroy());
 }
 
 app.get('/api/proxy-stream', (req, res) => {
@@ -214,15 +240,15 @@ app.get('/api/proxy-stream', (req, res) => {
 
 // ── Start ────────────────────────────────────────────────────────
 app.listen(PORT, '127.0.0.1', () => {
-  console.log(`[MyTV OS] API server running on http://127.0.0.1:${PORT}`);
+  console.log(`[MythOS TV] API server running on http://127.0.0.1:${PORT}`);
   // Init config if not exists
   if (!fs.existsSync(CFG_FILE)) {
     saveConfig(DEFAULT_CONFIG);
-    console.log('[MyTV OS] Default config created at', CFG_FILE);
+    console.log('[MythOS TV] Default config created at', CFG_FILE);
   }
   if (!fs.existsSync(AUTH_FILE)) {
     const auth = { user: 'admin', passHash: hashPass('admin123'), token: crypto.randomBytes(32).toString('hex') };
     fs.writeFileSync(AUTH_FILE, JSON.stringify(auth, null, 2));
-    console.log('[MyTV OS] Auth created — user: admin / pass: admin123 — CAMBIA ESTO');
+    console.log('[MythOS TV] Auth created — user: admin / pass: admin123 — CAMBIA ESTO');
   }
 });
