@@ -1,250 +1,279 @@
-# 📺 MyTV OS
+# 📺 MythOS TV
 
-**PWA tipo Sistema Operativo de TV personal**  
-Cinematic UI · WebOS/HarmonyOS-style · Navegación con control remoto · Offline-ready
+**Personal TV Operating System PWA**
+🎬 Cinematic UI · 📺 Remote Navigation · ⚡ Offline-ready · 🌐 Cross-platform
+
+MythOS TV es un sistema operativo de TV personal desarrollado como una Progressive Web App (PWA), inspirado en las interfaces de WebOS y HarmonyOS. Está diseñado para ofrecer una experiencia multimedia moderna, optimizada para televisores, controles remotos y dispositivos de bajo consumo.
+
+---
+
+## ✨ Características
+
+* 🎬 Interfaz cinematográfica estilo Smart TV.
+* 📺 Navegación optimizada para control remoto y teclado.
+* ⚡ Instalación como Progressive Web App (PWA).
+* 🌐 Funcionamiento offline mediante Service Worker.
+* ❤️ Sistema de favoritos.
+* 🔍 Búsqueda integrada.
+* 📡 Soporte para IPTV y contenido multimedia.
+* 🖥️ Panel de administración integrado.
+* 👥 Gestión de usuarios y autenticación.
+* 📱 Compatible con Smart TV, Android TV, navegadores y dispositivos móviles.
+* 🚀 Desarrollado en Vanilla JavaScript y Node.js.
 
 ---
 
 ## 🗂️ Estructura del proyecto
 
+```text
+mythos-tv/
+├── .gitignore
+├── README.md
+├── index.html              ← Shell principal del sistema
+├── admin.html              ← Panel de administración
+├── app.js                  ← Runtime y lógica principal
+├── app1.js                 ← Funcionalidades experimentales
+├── styles.css              ← Interfaz y estilos
+├── server.js               ← Backend Node.js
+├── manifest.json           ← Configuración PWA
+├── service-worker.js       ← Cache y soporte offline
+├── package.json            ← Dependencias y scripts
+├── package-lock.json
+├── nginx.conf              ← Configuración de Nginx
+├── mytv.service            ← Servicio systemd
+├── deploy.sh               ← Instalación automática
+├── setup-backend.sh        ← Configuración del backend
+├── apps/                   ← Módulos y aplicaciones
+├── assets/
+│   └── icons/
+│       ├── icon.svg
+│       ├── icon-192.png
+│       └── icon-512.png
+└── data/
+    ├── auth.json           ← Configuración de autenticación
+    ├── config.json         ← Configuración del sistema
+    └── users.json          ← Gestión de usuarios
 ```
-mytv-os/
-├── index.html          ← Shell principal del OS
-├── styles.css          ← UI completa (OS cinematic dark)
-├── app.js              ← Runtime: boot, router, apps, remote nav
-├── manifest.json       ← PWA manifest (fullscreen, landscape)
-├── service-worker.js   ← Cache-first, offline support
-├── nginx.conf          ← Config Nginx lista para producción
-├── deploy.sh           ← Script de instalación automática
-└── assets/
-    └── icons/
-        ├── icon-192.png
-        └── icon-512.png
+
+> **Nota:** algunas instalaciones antiguas pueden seguir utilizando el directorio `~/mytvos` por compatibilidad. El nombre oficial del proyecto es **MythOS TV**.
+
+---
+
+## 🚀 Instalación rápida
+
+### Clonar el repositorio
+
+```bash
+git clone https://github.com/mikesosacr/mythos-tv.git
+cd mythos-tv
+```
+
+### Instalar dependencias
+
+```bash
+npm install
+```
+
+### Ejecutar
+
+```bash
+npm start
+```
+
+o
+
+```bash
+node server.js
 ```
 
 ---
 
 ## 🚀 Instalación en VPS (Ubuntu 22.04+)
 
-### Opción A — Script automático
+### Actualizar el sistema
 
 ```bash
-# 1. Subir archivos al VPS
-scp -r ./mytv-os ubuntu@TU_IP_VPS:/home/ubuntu/
+sudo apt update && sudo apt upgrade -y
+```
 
-# 2. Entrar al VPS
-ssh ubuntu@TU_IP_VPS
+### Instalar Node.js y Nginx
 
-# 3. Entrar al directorio
-cd /home/ubuntu/mytv-os
+```bash
+curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -
+sudo apt install nodejs nginx -y
+```
 
-# 4. Dar permisos y ejecutar
-chmod +x deploy.sh
-bash deploy.sh tu-dominio.com
+Verificar:
+
+```bash
+node -v
+npm -v
+nginx -v
 ```
 
 ---
 
-### Opción B — Manual paso a paso
+## 📂 Despliegue
+
+### Copiar el proyecto
 
 ```bash
-# ── 1. Actualizar sistema
-sudo apt update && sudo apt upgrade -y
-
-# ── 2. Instalar Nginx
-sudo apt install nginx -y
-sudo systemctl enable nginx
-sudo systemctl start nginx
-
-# ── 3. Crear directorio web
 sudo mkdir -p /var/www/mytv
-sudo chown -R $USER:$USER /var/www/mytv
+sudo cp -r . /var/www/mytv/
+```
 
-# ── 4. Copiar archivos del proyecto
-cp -r ~/mytv-os/* /var/www/mytv/
+### Instalar dependencias
 
-# ── 5. Instalar configuración Nginx
-sudo cp /var/www/mytv/nginx.conf /etc/nginx/sites-available/mytv-os
+```bash
+cd /var/www/mytv
+npm install
+```
 
-# ── 6. Editar el server_name (poner tu IP o dominio)
-sudo nano /etc/nginx/sites-available/mytv-os
-# Cambiar: server_name tu-dominio.com www.tu-dominio.com;
-# Por:     server_name TU_IP_O_DOMINIO;
+### Iniciar el backend
 
-# ── 7. Activar el sitio
-sudo ln -sf /etc/nginx/sites-available/mytv-os /etc/nginx/sites-enabled/
-sudo rm -f /etc/nginx/sites-enabled/default
+```bash
+node server.js
+```
 
-# ── 8. Validar y reiniciar Nginx
+---
+
+## ⚙️ Servicio systemd
+
+Instalar:
+
+```bash
+sudo cp mytv.service /etc/systemd/system/mytv-os.service
+sudo systemctl daemon-reload
+sudo systemctl enable mytv-os
+sudo systemctl start mytv-os
+```
+
+Verificar:
+
+```bash
+sudo systemctl status mytv-os
+```
+
+---
+
+## 🌐 Configuración de Nginx
+
+```bash
+sudo cp nginx.conf /etc/nginx/sites-available/mythos-tv
+sudo ln -sf /etc/nginx/sites-available/mythos-tv /etc/nginx/sites-enabled/
 sudo nginx -t
 sudo systemctl restart nginx
-
-# ── 9. Firewall
-sudo ufw allow 'Nginx Full'
-sudo ufw allow OpenSSH
-sudo ufw enable
 ```
 
 ---
 
-### HTTPS con Let's Encrypt (recomendado para PWA)
+## 🔒 HTTPS (Recomendado)
 
 ```bash
 sudo apt install certbot python3-certbot-nginx -y
-sudo certbot --nginx -d tu-dominio.com -d www.tu-dominio.com
+sudo certbot --nginx
 ```
 
-> **⚠️ Nota:** HTTPS es requerido para que el Service Worker funcione en Android TV y para instalar la PWA en la mayoría de navegadores. En red local puede usarse HTTP.
+HTTPS es recomendado para la instalación de la PWA y para el correcto funcionamiento de los Service Workers en algunos dispositivos.
 
 ---
 
-## 📺 Acceso desde TV
+## 🖥️ Administración
 
-### Android TV / Google TV
-1. Abre el navegador del TV (Chrome, Firefox, o el navegador nativo)
-2. Navega a `http://TU_IP_VPS` o `https://tu-dominio.com`
-3. Para instalar como PWA: menú → "Añadir a pantalla principal" o "Instalar app"
+MythOS TV incluye un panel de administración integrado.
 
-### LG WebOS
-1. Abre el navegador web integrado
-2. Navega a la URL de tu VPS
-3. La app funcionará en fullscreen automáticamente
+Archivos relacionados:
 
-### Samsung Tizen
-1. Usa el navegador Samsung Internet
-2. Navega a la URL
-3. Instala como app desde el menú del navegador
-
-### Desde cualquier dispositivo en red local
-```bash
-# Ver la IP de tu VPS
-ip addr show | grep 'inet ' | grep -v 127.0.0.1
-
-# Acceder desde TV en la misma red
-http://192.168.X.X
-```
+* `admin.html`
+* `data/config.json`
+* `data/users.json`
+* `data/auth.json`
 
 ---
 
-## ⚙️ Configuración de Apps
+## 📡 Servicios multimedia
 
-### Configurar Jellyfin
-1. Abre MyTV OS
-2. Ve a **Configuración → Apps & Links**
-3. Cambia la URL de Jellyfin: `http://TU_IP:8096`
-4. Guarda cambios
+### IPTV
 
-### Agregar streams IPTV
-Las URLs de canales IPTV se configuran directamente en `app.js`:
-```javascript
-const IPTV_CHANNELS = [
-  { name: 'Mi Canal',  cat: 'Local', emoji: '📺', url: 'http://stream.example.com/channel.m3u8' },
-  // ...
-];
-```
+Permite integrar listas y servicios de streaming compatibles.
 
-### Agregar estaciones de radio
-```javascript
-const RADIO_STATIONS = [
-  { name: 'Mi Radio', genre: 'Pop', emoji: '🎵', url: 'https://stream.radio.com/live.mp3' },
-  // ...
-];
-```
+### Radio
+
+Admite estaciones de radio online y streams personalizados.
+
+### Servicios externos
+
+Permite integrar aplicaciones y servicios multimedia mediante enlaces y configuraciones personalizadas.
 
 ---
 
-## 🎮 Controles remotos / Teclado
+## 🎮 Navegación
 
-| Tecla            | Acción                    |
-|------------------|---------------------------|
-| ← → ↑ ↓         | Navegar entre apps        |
-| Enter / OK       | Abrir app seleccionada    |
-| Escape / Back    | Volver al launcher        |
-| Backspace        | Volver (control remoto)   |
-| Mouse / touch    | Hover y clic directo      |
-
----
-
-## 🔧 Personalización
-
-### Wallpapers disponibles
-Cambia en Configuración → Sistema → Fondo de pantalla:
-- **Cosmos** (default) — gradientes púrpura/cyan
-- **Aurora** — tonos verdes y cyan
-- **Ciudad nocturna** — tonos naranja/morado
-- **Abstracto** — rosa/azul
-
-### Agregar nueva app al launcher
-En `app.js`, agrega al array `DEFAULT_APPS`:
-```javascript
-{
-  id: 'mi-app',
-  label: 'Mi App',
-  sublabel: 'Descripción',
-  emoji: '🎯',
-  type: 'external',       // 'external' o 'internal'
-  url: 'https://mi-app.com',
-  color: 'purple',        // purple, cyan, orange, green, pink, blue, red, yellow
-  badge: 'CUSTOM',        // opcional
-}
-```
+| Tecla         | Acción             |
+| ------------- | ------------------ |
+| ← → ↑ ↓       | Navegar            |
+| Enter / OK    | Abrir              |
+| Escape        | Volver             |
+| Backspace     | Retroceder         |
+| Mouse / Touch | Navegación directa |
 
 ---
 
-## 🏗️ Comandos útiles de mantenimiento
+## 🏗️ Comandos útiles
+
+### Ver logs del backend
 
 ```bash
-# Ver logs en tiempo real
-sudo journalctl -u nginx -f
-
-# Ver accesos
-sudo tail -f /var/log/nginx/mytv-os.access.log
-
-# Actualizar archivos
-cp -r ~/mytv-os/* /var/www/mytv/
-sudo systemctl reload nginx
-
-# Estado del servicio
-sudo systemctl status nginx
-
-# Reiniciar si hay problemas
-sudo systemctl restart nginx
-
-# Verificar config Nginx
-sudo nginx -t
+sudo journalctl -u mytv-os -f
 ```
 
----
+### Estado del servicio
 
-## 🌐 Arquitectura PWA
-
+```bash
+sudo systemctl status mytv-os
 ```
-Navegador TV
-    │
-    ▼
-Service Worker (cache-first)
-    │
-    ├── Cache hit → Respuesta inmediata (offline ready)
-    └── Cache miss → Fetch red → Guardar en cache
-    
-Estrategias:
-  - Core app (HTML/CSS/JS): cache-first
-  - Fuentes Google: stale-while-revalidate  
-  - APIs externas: network-only
+
+### Reiniciar
+
+```bash
+sudo systemctl restart mytv-os
+```
+
+### Verificar sintaxis
+
+```bash
+node --check server.js
+node --check app.js
+```
+
+### Actualizar dependencias
+
+```bash
+npm install
 ```
 
 ---
 
 ## ⚡ Rendimiento
 
-- **Boot time**: ~1.5s animación + carga inmediata
-- **Sin frameworks**: Vanilla JS puro, 0 dependencias npm
-- **Gzip**: todos los assets comprimidos en Nginx
-- **Cache**: assets estáticos cacheados 1 año
-- **Offline**: launcher funciona sin internet tras primera visita
+* Arranque rápido.
+* Sin frameworks pesados.
+* Compatible con televisores y navegadores modernos.
+* Cache offline mediante Service Worker.
+* Instalación como aplicación nativa.
 
 ---
 
-## 📝 Licencia
+## 🗺️ Roadmap
 
-MIT — Úsalo, modifícalo, despliégalo como quieras.
+* [ ] Sistema de plugins.
+* [ ] Multiusuario.
+* [ ] Sincronización en la nube.
+* [ ] Integración con más servicios multimedia.
+* [ ] Mejoras para WebOS, Tizen y otras plataformas Smart TV.
+
+---
+
+## 📄 Licencia
+
+MIT — Úsalo, modifícalo y despliégalo libremente.
