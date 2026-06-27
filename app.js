@@ -219,8 +219,18 @@ function handleKey(e) {
 function handleHomeKey(key) {
   // Si el modal de detalle está abierto, manejarlo primero
   if (!document.getElementById('detail-overlay').classList.contains('hidden')) {
-    if (key === 'Escape' || key === 'Backspace') { playSnd('nav'); closeDetailModal(); }
-    if (key === 'Enter') document.getElementById('detail-play-btn').click();
+    const playBtn  = document.getElementById('detail-play-btn');
+    const closeBtn = document.getElementById('detail-close-btn');
+    if (key === 'Escape' || key === 'Backspace') { playSnd('nav'); closeDetailModal(); return; }
+    if (key === 'ArrowLeft' || key === 'ArrowRight') {
+      playSnd('nav');
+      state._detailFocusBtn = state._detailFocusBtn === 'play' ? 'close' : 'play';
+      setRemoteFocus(playBtn,  state._detailFocusBtn === 'play');
+      setRemoteFocus(closeBtn, state._detailFocusBtn === 'close');
+      (state._detailFocusBtn === 'play' ? playBtn : closeBtn).focus();
+      return;
+    }
+    if (key === 'Enter') { playSnd('enter'); (state._detailFocusBtn === 'close' ? closeBtn : playBtn).click(); }
     return;
   }
 
@@ -440,7 +450,10 @@ function openDetailModal(type, item) {
   }
 
   overlay.classList.remove('hidden');
-  document.getElementById('detail-play-btn').focus();
+  state._detailFocusBtn = 'play';
+  setRemoteFocus(playBtn, true);
+  setRemoteFocus(document.getElementById('detail-close-btn'), false);
+  playBtn.focus();
 }
 
 function closeDetailModal() {
@@ -449,7 +462,17 @@ function closeDetailModal() {
   state._detailType = null;
 }
 function handleSettingsKey(key) { if (key === 'Backspace' || key === 'Escape') { playSnd('nav'); navigateTo('home'); } }
-function handleAppKey(key) { if (key === 'Backspace' || key === 'Escape') { playSnd('nav'); stopAll(); navigateTo('home'); } }
+function handleAppKey(key) {
+  if (key === 'Backspace' || key === 'Escape') { playSnd('nav'); stopAll(); navigateTo('home'); return; }
+  if (typeof state.appNavHandler === 'function') state.appNavHandler(key);
+}
+
+/* Foco visual de control remoto — outline no destructivo, no pisa estilos inline existentes */
+function setRemoteFocus(el, on) {
+  if (!el) return;
+  el.style.outline = on ? '2px solid var(--accent-secondary)' : 'none';
+  el.style.outlineOffset = on ? '-2px' : '0';
+}
 
 /* ══════════════════════════════════════════════════════════════
    ROUTER
@@ -469,6 +492,7 @@ function navigateTo(screenId, title, renderFn) {
   setTimeout(() => { next.classList.add('active'); next.classList.remove('enter-right'); }, 30);
 
   state.currentScreen = screenId;
+  state.appNavHandler = null;
   const tb = document.getElementById('topbar-title');
   if (tb) tb.textContent = title || 'Inicio';
   if (renderFn) renderFn();
@@ -742,6 +766,20 @@ function playStream(url, title) {
       if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); togglePlayPause(); }
       if (e.key === 'ArrowRight' && isFinite(videoEl.duration)) videoEl.currentTime = Math.min(videoEl.currentTime + 10, videoEl.duration);
       if (e.key === 'ArrowLeft'  && isFinite(videoEl.duration)) videoEl.currentTime = Math.max(videoEl.currentTime - 10, 0);
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        videoEl.volume = Math.min(videoEl.volume + 0.1, 1);
+        videoEl.muted  = false;
+        volumeSlider.value = videoEl.volume;
+        muteBtn.textContent = videoEl.volume === 0 ? '🔇' : '🔊';
+      }
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        videoEl.volume = Math.max(videoEl.volume - 0.1, 0);
+        videoEl.muted  = videoEl.volume === 0;
+        volumeSlider.value = videoEl.volume;
+        muteBtn.textContent = videoEl.muted ? '🔇' : '🔊';
+      }
     });
   }
 
@@ -837,6 +875,9 @@ function openLiveTV() {
     // Get unique categories
     const cats = ['Todos', ...new Set(channels.map(c => c.cat || 'General'))];
     let activeCat = cats[0];
+    let tvPane    = 'list'; // 'cats' | 'list'
+    let tvCatIdx  = 0;
+    let tvChanIdx = 0;
 
     body.style.cssText = 'padding:0;align-items:stretch;flex-direction:row;gap:0;overflow:hidden;';
     body.innerHTML = `
@@ -915,10 +956,55 @@ function openLiveTV() {
           c.style.borderLeft = `3px solid ${active ? 'var(--accent)' : 'transparent'}`;
         });
         renderChannelList(activeCat);
+        tvChanIdx = 0;
+        focusChan(0);
       });
     });
 
     renderChannelList(activeCat);
+
+    /* Navegación con control remoto: ←→ cambia de panel, ↑↓ recorre la lista activa */
+    const getCatEls  = () => [...document.querySelectorAll('.tv-cat-item')];
+    const getChanEls = () => [...document.querySelectorAll('.tv-channel-row')];
+    function focusCat(i) {
+      const els = getCatEls();
+      if (!els.length) return;
+      tvCatIdx = Math.max(0, Math.min(i, els.length - 1));
+      els.forEach((el, j) => setRemoteFocus(el, tvPane === 'cats' && j === tvCatIdx));
+      els[tvCatIdx].scrollIntoView({ block: 'nearest' });
+    }
+    function focusChan(i) {
+      const els = getChanEls();
+      if (!els.length) return;
+      tvChanIdx = Math.max(0, Math.min(i, els.length - 1));
+      els.forEach((el, j) => setRemoteFocus(el, tvPane === 'list' && j === tvChanIdx));
+      els[tvChanIdx]?.scrollIntoView({ block: 'nearest' });
+    }
+    state.appNavHandler = (key) => {
+      if (key === 'Enter') {
+        playSnd('enter');
+        if (tvPane === 'cats') {
+          getCatEls()[tvCatIdx]?.click();
+          tvChanIdx = 0;
+          focusChan(0);
+        } else {
+          getChanEls()[tvChanIdx]?.click();
+        }
+        return;
+      }
+      if (!['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(key)) return;
+      playSnd('nav');
+      if (tvPane === 'cats') {
+        if (key === 'ArrowUp')    focusCat(tvCatIdx - 1);
+        if (key === 'ArrowDown')  focusCat(tvCatIdx + 1);
+        if (key === 'ArrowRight') { tvPane = 'list'; focusChan(tvChanIdx); focusCat(tvCatIdx); }
+      } else {
+        if (key === 'ArrowUp')   focusChan(tvChanIdx - 1);
+        if (key === 'ArrowDown') focusChan(tvChanIdx + 1);
+        if (key === 'ArrowLeft') { tvPane = 'cats'; focusCat(tvCatIdx); focusChan(tvChanIdx); }
+      }
+    };
+    focusChan(0);
   });
 }
 
@@ -948,7 +1034,7 @@ function openMovies() {
 
     body.style.cssText = 'align-items:flex-start;padding:12px 0;';
     body.innerHTML = `
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:16px;width:100%;padding:4px;">
+      <div id="movies-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:16px;width:100%;padding:4px;">
         ${movies.map((m, i) => `
           <div class="movie-card" data-index="${i}" data-url="${m.url}" data-name="${m.name}" style="
             background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);
@@ -986,6 +1072,35 @@ function openMovies() {
         }, 100);
       });
     });
+
+    /* Navegación con control remoto: columnas reales calculadas del grid renderizado */
+    let _movIdx = 0;
+    const getMovieCards = () => [...body.querySelectorAll('.movie-card')];
+    const getMovieCols  = () => {
+      const grid = document.getElementById('movies-grid');
+      if (!grid) return 1;
+      return getComputedStyle(grid).gridTemplateColumns.split(' ').filter(Boolean).length || 1;
+    };
+    function focusMovie(i) {
+      const cards = getMovieCards();
+      if (!cards.length) return;
+      _movIdx = Math.max(0, Math.min(i, cards.length - 1));
+      cards.forEach((c, j) => setRemoteFocus(c, j === _movIdx));
+      cards[_movIdx].scrollIntoView({ block: 'nearest' });
+    }
+    state.appNavHandler = (key) => {
+      const cards = getMovieCards();
+      if (!cards.length) return;
+      if (key === 'Enter') { playSnd('enter'); cards[_movIdx]?.click(); return; }
+      if (!['ArrowRight','ArrowLeft','ArrowDown','ArrowUp'].includes(key)) return;
+      playSnd('nav');
+      const cols = getMovieCols();
+      if (key === 'ArrowRight') focusMovie(_movIdx + 1);
+      if (key === 'ArrowLeft')  focusMovie(_movIdx - 1);
+      if (key === 'ArrowDown')  focusMovie(_movIdx + cols);
+      if (key === 'ArrowUp')    focusMovie(_movIdx - cols);
+    };
+    focusMovie(0);
   });
 }
 
@@ -1048,6 +1163,48 @@ function openRadio() {
       el.addEventListener('click', () => selectStation(i));
     });
     selectStation(state.currentRadioStation);
+
+    /* Navegación con control remoto: ←→ entre controles ↔ lista, ↑↓ recorre la lista de estaciones */
+    let radioZone   = 'stations'; // 'controls' | 'stations'
+    let radioCtrlIdx = 1;          // 0 prev · 1 play · 2 next
+    let radioStatIdx = state.currentRadioStation || 0;
+    const getStationEls = () => [...document.querySelectorAll('.radio-station-item')];
+    const getControlEls = () => [document.getElementById('radio-prev'), document.getElementById('radio-play'), document.getElementById('radio-next')];
+    function focusStationItem(i) {
+      const els = getStationEls();
+      if (!els.length) return;
+      radioStatIdx = Math.max(0, Math.min(i, els.length - 1));
+      els.forEach((el, j) => setRemoteFocus(el, radioZone === 'stations' && j === radioStatIdx));
+      els[radioStatIdx].scrollIntoView({ block: 'nearest' });
+    }
+    function focusControlItem(i) {
+      const els = getControlEls();
+      radioCtrlIdx = Math.max(0, Math.min(i, els.length - 1));
+      els.forEach((el, j) => setRemoteFocus(el, radioZone === 'controls' && j === radioCtrlIdx));
+    }
+    state.appNavHandler = (key) => {
+      if (key === 'Enter') {
+        playSnd('enter');
+        if (radioZone === 'controls') getControlEls()[radioCtrlIdx]?.click();
+        else getStationEls()[radioStatIdx]?.click();
+        return;
+      }
+      if (!['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(key)) return;
+      playSnd('nav');
+      if (radioZone === 'stations') {
+        if (key === 'ArrowUp')   focusStationItem(radioStatIdx - 1);
+        if (key === 'ArrowDown') focusStationItem(radioStatIdx + 1);
+        if (key === 'ArrowLeft') { radioZone = 'controls'; focusControlItem(radioCtrlIdx); focusStationItem(radioStatIdx); }
+      } else {
+        if (key === 'ArrowLeft')  focusControlItem(radioCtrlIdx - 1);
+        if (key === 'ArrowRight') {
+          if (radioCtrlIdx === 2) { radioZone = 'stations'; focusStationItem(radioStatIdx); focusControlItem(radioCtrlIdx); }
+          else focusControlItem(radioCtrlIdx + 1);
+        }
+      }
+    };
+    focusStationItem(radioStatIdx);
+    focusControlItem(radioCtrlIdx);
   });
 }
 
