@@ -644,9 +644,8 @@ body::after {
   gap: var(--dock-gap);
   width: auto;
   max-width: 100%;
-  padding: 6px 20px 18px;
-  overflow-x: auto;
-  overflow-y: hidden;
+  padding: 10px 20px 22px;
+  overflow: visible;
   scrollbar-width: none;
   -ms-overflow-style: none;
 }

@@ -117,6 +117,13 @@ function initUI() {
   initDetailModal();
   state.focusZone = 'dock';
   focusTile(0);
+
+  // Logo clickeable → volver al home
+  const brand = document.querySelector('.topbar-brand');
+  if (brand) {
+    brand.style.cursor = 'pointer';
+    brand.addEventListener('click', () => navigateTo('home', 'Inicio'));
+  }
 }
 
 /* ── Clock ───────────────────────────────────────────────────── */
@@ -472,7 +479,7 @@ function navigateTo(screenId, title, renderFn) {
    APP LAUNCHER
    ══════════════════════════════════════════════════════════════ */
 function launchApp(app) {
-  if (app.type === 'external') { showLinkModal(app); return; }
+  if (app.type === 'external') { openGenericApp(app); return; }
   switch (app.screen) {
     case 'settings': openSettings();   break;
     case 'livetv':   openLiveTV();     break;
@@ -1147,20 +1154,243 @@ function initSettingsListeners() {
 }
 
 function openGenericApp(app) {
-  navigateTo('app', app.label, () => {
-    const title = document.getElementById('app-screen-title');
-    const body  = document.getElementById('app-screen-body');
-    const back  = document.getElementById('app-back');
-    title.textContent = app.label;
-    back.onclick = () => navigateTo('home', 'Inicio');
-    body.style.cssText = '';
-    body.innerHTML = `
-      <div class="app-placeholder-icon">${app.emoji}</div>
-      <div class="app-placeholder-title">${app.label}</div>
-      <div class="app-placeholder-desc">Esta app está lista para conectarse.<br/>Configura la URL en el <a href="/admin.html" style="color:var(--accent)">panel admin</a>.</div>
-      ${app.url ? `<a class="app-launch-btn" href="${app.url}" target="_blank"><span>🚀</span> Abrir ${app.label}</a>` : ''}
-    `;
+  if (app.url) {
+    openInAppBrowser(app);
+  } else {
+    navigateTo('app', app.label, () => {
+      const title = document.getElementById('app-screen-title');
+      const body  = document.getElementById('app-screen-body');
+      const back  = document.getElementById('app-back');
+      title.textContent = app.label;
+      back.onclick = () => navigateTo('home', 'Inicio');
+      body.style.cssText = '';
+      body.innerHTML = `
+        <div class="app-placeholder-icon">${app.emoji}</div>
+        <div class="app-placeholder-title">${app.label}</div>
+        <div class="app-placeholder-desc">Esta app está lista para conectarse.<br/>Configura la URL en el <a href="/admin.html" style="color:var(--accent)">panel admin</a>.</div>
+      `;
+    });
+  }
+}
+
+// Dominios que bloquean iframe — van directo al lanzador nativo
+const NATIVE_LAUNCH_DOMAINS = [
+  'youtube.com', 'youtu.be',
+  'plex.tv', 'app.plex.tv',
+  'twitch.tv',
+  'netflix.com',
+  'disneyplus.com',
+  'primevideo.com',
+  'runtime.tv', 'www.runtime.tv',
+];
+
+function isNativeDomain(url) {
+  try {
+    const host = new URL(url).hostname.replace(/^www\./, '');
+    return NATIVE_LAUNCH_DOMAINS.some(d => host === d || host.endsWith('.' + d));
+  } catch { return false; }
+}
+
+function openInAppBrowser(app) {
+  document.removeEventListener('keydown', handleKey);
+  showNativeLauncher(app);
+}
+
+function closeInAppBrowser() {
+  const el = document.getElementById('inapp-browser');
+  if (el) el.remove();
+  document.addEventListener('keydown', handleKey);
+  state.focusZone = 'dock';
+  focusTile(state.focusIndex || 0);
+}
+
+function handleInAppKey(e) {
+  if (e.key === 'Escape' || e.key === 'Backspace') {
+    e.preventDefault();
+    document.removeEventListener('keydown', handleInAppKey);
+    const overlay = document.getElementById('inapp-browser');
+    if (overlay?._close) overlay._close();
+    else closeInAppBrowser();
+  }
+}
+
+/* Barra superior reutilizable */
+function buildInAppTopbar(app) {
+  return `
+    <div style="
+      display:flex;align-items:center;gap:14px;
+      padding:0 20px;height:52px;flex-shrink:0;
+      background:rgba(7,7,16,0.98);
+      border-bottom:1px solid rgba(255,255,255,0.07);
+      position:relative;z-index:2;
+    ">
+      <button id="inapp-back" style="
+        display:flex;align-items:center;gap:8px;
+        background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.12);
+        color:#fff;padding:8px 18px;border-radius:8px;
+        font-size:0.85rem;cursor:pointer;flex-shrink:0;
+        transition:background 0.15s;
+      " onmouseover="this.style.background='rgba(255,255,255,0.15)'"
+         onmouseout="this.style.background='rgba(255,255,255,0.08)'">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <polyline points="15,18 9,12 15,6"/>
+        </svg>
+        Inicio
+      </button>
+      <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;">
+        <span style="font-size:1.3rem;">${app.emoji || '🌐'}</span>
+        <span style="font-size:0.95rem;font-weight:500;color:#f0f0fa;
+          white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+          ${app.label}
+        </span>
+      </div>
+    </div>`;
+}
+
+/* Modo iframe — para sitios que sí lo permiten */
+function showIframeBrowser(app) {
+  // Contenedor del iframe — deja espacio arriba para la barra
+  const overlay = document.createElement('div');
+  overlay.id = 'inapp-browser';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:9000;background:#000;display:flex;flex-direction:column;';
+
+  // Barra superior SIEMPRE visible, fuera del iframe, z-index máximo
+  const topbar = document.createElement('div');
+  topbar.style.cssText = `
+    flex-shrink:0;
+    display:flex;align-items:center;gap:12px;
+    height:48px;padding:0 16px;
+    background:rgba(7,7,16,0.97);
+    border-bottom:1px solid rgba(255,255,255,0.1);
+    z-index:9001;
+  `;
+  topbar.innerHTML = `
+    <button id="inapp-back" style="
+      display:flex;align-items:center;gap:8px;
+      background:rgba(255,255,255,0.1);
+      border:1px solid rgba(255,255,255,0.15);
+      color:#fff;padding:7px 16px;border-radius:8px;
+      font-size:0.85rem;font-family:Inter,sans-serif;
+      cursor:pointer;flex-shrink:0;
+    ">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <polyline points="15,18 9,12 15,6"/>
+      </svg>
+      MythOS TV
+    </button>
+    <span style="font-size:1.1rem;">${app.emoji || '🌐'}</span>
+    <span style="font-size:0.9rem;font-weight:500;color:#f0f0fa;
+      white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;">
+      ${app.label}
+    </span>
+  `;
+
+  // iframe ocupa el resto de la pantalla debajo de la barra
+  const frame = document.createElement('iframe');
+  frame.id = 'inapp-frame';
+  frame.src = app.url;
+  frame.style.cssText = 'flex:1;border:none;width:100%;';
+  frame.allowFullscreen = true;
+  frame.setAttribute('allow', 'autoplay; fullscreen; encrypted-media');
+
+  overlay.appendChild(topbar);
+  overlay.appendChild(frame);
+  document.body.appendChild(overlay);
+
+  function doClose() {
+    document.removeEventListener('keydown', handleInAppKey);
+    overlay.remove();
+    document.addEventListener('keydown', handleKey);
+    state.focusZone = 'dock';
+    focusTile(state.focusIndex || 0);
+  }
+
+  document.getElementById('inapp-back').addEventListener('click', doClose);
+  document.addEventListener('keydown', handleInAppKey);
+  // Guardar referencia para handleInAppKey
+  overlay._close = doClose;
+
+  // Detectar bloqueo de iframe tras 4s
+  const timer = setTimeout(() => {
+    try {
+      if (!frame.contentDocument || !frame.contentDocument.body ||
+          frame.contentDocument.body.innerHTML === '') {
+        doClose();
+        showNativeLauncher(app);
+      }
+    } catch {
+      doClose();
+      showNativeLauncher(app);
+    }
+  }, 4000);
+
+  frame.addEventListener('load', () => clearTimeout(timer));
+}
+
+/* Modo lanzador nativo — para sitios que bloquean iframe */
+function showNativeLauncher(app) {
+  const overlay = document.createElement('div');
+  overlay.id = 'inapp-browser';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:500;display:flex;flex-direction:column;background:var(--bg-void);';
+
+  overlay.innerHTML = `
+    ${buildInAppTopbar(app)}
+    <div style="
+      flex:1;display:flex;flex-direction:column;
+      align-items:center;justify-content:center;gap:28px;
+      background:
+        radial-gradient(ellipse 70% 60% at 50% 40%, rgba(124,106,247,0.12) 0%, transparent 70%),
+        var(--bg-void);
+    ">
+      <div style="font-size:5rem;filter:drop-shadow(0 0 32px rgba(124,106,247,0.5));">
+        ${app.emoji || '🌐'}
+      </div>
+      <div style="text-align:center;">
+        <div style="font-size:1.8rem;font-weight:500;color:#f0f0fa;margin-bottom:8px;">
+          ${app.label}
+        </div>
+        <div style="font-size:0.9rem;color:rgba(255,255,255,0.4);">
+          Se abrirá en pantalla completa
+        </div>
+      </div>
+      <button id="native-launch-btn" style="
+        display:flex;align-items:center;gap:10px;
+        background:linear-gradient(90deg,#7c6af7,#3ecfcf);
+        border:none;color:#fff;
+        padding:14px 36px;border-radius:12px;
+        font-size:1rem;font-weight:500;cursor:pointer;
+        box-shadow:0 0 32px rgba(124,106,247,0.4);
+        transition:opacity 0.15s;
+      " onmouseover="this.style.opacity='0.85'"
+         onmouseout="this.style.opacity='1'">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>
+        Abrir ${app.label}
+      </button>
+    </div>`;
+
+  document.body.appendChild(overlay);
+
+  document.getElementById('inapp-back').addEventListener('click', closeInAppBrowser);
+
+  document.getElementById('native-launch-btn').addEventListener('click', () => {
+    closeInAppBrowser();
+    window.location.href = app.url;
   });
+
+  // Enter lanza, Esc vuelve
+  function handleNativeKey(e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      document.removeEventListener('keydown', handleNativeKey);
+      document.getElementById('native-launch-btn')?.click();
+    }
+    if (e.key === 'Escape' || e.key === 'Backspace') {
+      e.preventDefault();
+      document.removeEventListener('keydown', handleNativeKey);
+      closeInAppBrowser();
+    }
+  }
+  document.addEventListener('keydown', handleNativeKey);
 }
 
 /* ══════════════════════════════════════════════════════════════

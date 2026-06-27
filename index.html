@@ -97,7 +97,6 @@
         <div class="home-suggestions" id="suggestions-movies-wrap">
           <div class="suggestions-label">Películas sugeridas</div>
           <div class="suggestions-row" id="suggestions-movies" role="list" aria-label="Películas sugeridas">
-            <!-- rendered by JS -->
           </div>
         </div>
 
@@ -105,7 +104,6 @@
         <div class="home-suggestions" id="suggestions-livetv-wrap">
           <div class="suggestions-label">Canales en vivo</div>
           <div class="suggestions-row" id="suggestions-livetv" role="list" aria-label="Canales en vivo">
-            <!-- rendered by JS -->
           </div>
         </div>
 
@@ -115,9 +113,7 @@
         <!-- Dock de apps -->
         <div class="home-dock-wrap">
           <div class="app-grid" id="app-grid" role="grid" aria-label="Aplicaciones">
-            <!-- Apps rendered by JS -->
           </div>
-
           <div class="home-footer">
             <span class="hint-key">←→</span> Navegar
             <span class="hint-sep">·</span>
@@ -247,8 +243,88 @@
   <audio id="snd-nav" src="" preload="none"></audio>
   <audio id="snd-enter" src="" preload="none"></audio>
 
+  <!-- PWA INSTALL BANNER -->
+  <div id="pwa-banner" style="
+    position:fixed;bottom:24px;left:50%;transform:translateX(-50%);
+    z-index:800;
+    background:rgba(14,13,30,0.97);
+    border:1px solid rgba(124,106,247,0.35);
+    border-radius:14px;
+    padding:14px 20px;
+    display:none;
+    align-items:center;gap:16px;
+    box-shadow:0 8px 32px rgba(0,0,0,0.6), 0 0 0 1px rgba(124,106,247,0.15);
+    backdrop-filter:blur(16px);
+    min-width:340px;max-width:90vw;
+    font-family:'Inter',sans-serif;
+  ">
+    <div style="font-size:1.8rem;flex-shrink:0;">📺</div>
+    <div style="flex:1;min-width:0;">
+      <div style="font-size:0.85rem;font-weight:500;color:#f0f0fa;margin-bottom:2px;">
+        Instalar MythOS TV
+      </div>
+      <div style="font-size:0.75rem;color:rgba(255,255,255,0.45);">
+        Instala la app para una experiencia de TV nativa
+      </div>
+    </div>
+    <button id="pwa-install-btn" style="
+      background:linear-gradient(90deg,#7c6af7,#3ecfcf);
+      border:none;color:#fff;
+      padding:8px 18px;border-radius:8px;
+      font-size:0.8rem;font-weight:500;
+      cursor:pointer;flex-shrink:0;white-space:nowrap;
+    ">Instalar</button>
+    <button id="pwa-dismiss-btn" style="
+      background:none;border:none;color:rgba(255,255,255,0.35);
+      font-size:1.2rem;cursor:pointer;padding:4px;flex-shrink:0;
+      line-height:1;
+    ">✕</button>
+  </div>
+
   <!-- HLS.js player -->
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5/dist/hls.min.js"></script>
   <script src="app.js"></script>
+  <script>
+    // Registrar Service Worker (requerido para PWA installable)
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/service-worker.js')
+          .catch(err => console.warn('SW register failed:', err));
+      });
+    }
+
+    // PWA Install prompt
+    let _pwaPrompt = null;
+    window.addEventListener('beforeinstallprompt', e => {
+      e.preventDefault();
+      _pwaPrompt = e;
+      // Solo mostrar si no fue descartado antes
+      if (!localStorage.getItem('pwa-dismissed')) {
+        setTimeout(() => {
+          const banner = document.getElementById('pwa-banner');
+          if (banner) banner.style.display = 'flex';
+        }, 3000); // Esperar 3s para no interrumpir el boot
+      }
+    });
+
+    document.getElementById('pwa-install-btn')?.addEventListener('click', async () => {
+      if (!_pwaPrompt) return;
+      _pwaPrompt.prompt();
+      const { outcome } = await _pwaPrompt.userChoice;
+      _pwaPrompt = null;
+      document.getElementById('pwa-banner').style.display = 'none';
+    });
+
+    document.getElementById('pwa-dismiss-btn')?.addEventListener('click', () => {
+      document.getElementById('pwa-banner').style.display = 'none';
+      localStorage.setItem('pwa-dismissed', '1');
+    });
+
+    // Si ya está instalada como PWA, nunca mostrar el banner
+    if (window.matchMedia('(display-mode: fullscreen)').matches ||
+        window.matchMedia('(display-mode: standalone)').matches) {
+      localStorage.setItem('pwa-dismissed', '1');
+    }
+  </script>
 </body>
 </html>
