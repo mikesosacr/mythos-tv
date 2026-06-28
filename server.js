@@ -21,7 +21,8 @@ const PORT = 3000;
 // ── Config files stored next to server.js ───────────────────────
 const DATA_DIR  = path.join(__dirname, 'data');
 const CFG_FILE  = path.join(DATA_DIR, 'config.json');
-const AUTH_FILE = path.join(DATA_DIR, 'auth.json');
+const AUTH_FILE  = path.join(DATA_DIR, 'auth.json');
+const USERS_FILE = path.join(DATA_DIR, 'users.json');
 
 // ── Ensure data dir exists ───────────────────────────────────────
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -204,11 +205,14 @@ function proxyStream(targetUrl, req, res, redirectsLeft) {
 
     const proto = parsed.protocol === 'https:' ? https : http;
     const headers = {
-      'User-Agent': 'Mozilla/5.0 (SMART-TV; Linux; Tizen 6.0) AppleWebKit/538.1 (KHTML, like Gecko) Version/6.0 TV Safari/538.1',
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Accept': '*/*',
+      'Accept-Language': 'en-US,en;q=0.9',
+      'Connection': 'keep-alive',
     };
-    if (req.headers.range) headers['Range'] = req.headers.range; // necesario para "seek" en <video>
+    if (req.headers.range) headers['Range'] = req.headers.range;
 
-    const upstreamReq = proto.get(targetUrl, { headers }, (upstream) => {
+    const upstreamReq = proto.get(targetUrl, { headers, timeout: 15000 }, (upstream) => {
       // Seguir redirecciones (muy común en object storage / CDN)
       if ([301, 302, 303, 307, 308].includes(upstream.statusCode) && upstream.headers.location && redirectsLeft > 0) {
         upstream.resume(); // descartar body del redirect
@@ -222,6 +226,11 @@ function proxyStream(targetUrl, req, res, redirectsLeft) {
       if (upstream.headers['content-range'])  res.setHeader('Content-Range', upstream.headers['content-range']);
       if (upstream.headers['accept-ranges'])  res.setHeader('Accept-Ranges', upstream.headers['accept-ranges']);
       upstream.pipe(res);
+    });
+
+    upstreamReq.on('timeout', () => {
+      upstreamReq.destroy();
+      if (!res.headersSent) res.status(504).json({ error: 'timeout conectando al stream' });
     });
 
     upstreamReq.on('error', (e) => {
@@ -238,7 +247,224 @@ app.get('/api/proxy-stream', (req, res) => {
   proxyStream(url, req, res, 3);
 });
 
+// ── PUBLIC: Transcodificación en tiempo real (MPEG4/DivX → H.264) ──
+// Úsalo cuando proxy-stream da solo audio (codec incompatible con el navegador)
+// Endpoint: /api/transcode?url=...
+const { spawn } = require('child_process');
+
+app.get('/api/transcode', (req, res) => {
+  const url = req.query.url;
+  if (!url) return res.status(400).json({ error: 'url requerida' });
+
+  let parsed;
+  try { parsed = new URL(url); }
+  catch { return res.status(400).json({ error: 'url inválida' }); }
+
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    return res.status(400).json({ error: 'protocolo no soportado' });
+  }
+
+  hostAllowed(parsed.hostname, (ok) => {
+    if (!ok) return res.status(403).json({ error: 'host bloqueado' });
+
+    res.setHeader('Content-Type', 'video/mp4');
+    res.setHeader('Transfer-Encoding', 'chunked');
+    res.setHeader('Cache-Control', 'no-cache');
+
+    // FFmpeg: leer URL → transcodificar → pipe a response
+    const ff = spawn('ffmpeg', [
+      '-loglevel', 'error',
+      '-user_agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0',
+      '-i', url,
+      '-c:v', 'libx264',     // H.264 — compatible con todos los navegadores
+      '-preset', 'ultrafast', // Mínima latencia de inicio
+      '-crf', '28',           // Calidad razonable con poco CPU
+      '-c:a', 'aac',          // Audio AAC
+      '-b:a', '128k',
+      '-movflags', 'frag_keyframe+empty_moov+faststart', // MP4 streameable
+      '-f', 'mp4',
+      'pipe:1',               // Output a stdout
+    ]);
+
+    ff.stdout.pipe(res);
+
+    ff.stderr.on('data', d => console.error('[transcode]', d.toString()));
+
+    ff.on('close', (code) => {
+      if (code !== 0 && !res.headersSent) res.status(502).end();
+    });
+
+    // Matar FFmpeg cuando el cliente se desconecta
+    function killFF() {
+      try {
+        ff.stdout.unpipe(res);
+        ff.kill('SIGTERM');
+        setTimeout(() => { try { ff.kill('SIGKILL'); } catch {} }, 2000);
+      } catch {}
+    }
+
+    req.on('close', killFF);
+    res.on('close', killFF);
+  });
+});
+
 // ── Start ────────────────────────────────────────────────────────
+
+// ── PROTECTED: verificar si un stream está activo ───────────────
+app.get('/api/admin/check-stream', (req, res) => {
+  if (!checkAuth(req)) return res.status(403).json({ error: 'No autorizado' });
+  const url = req.query.url;
+  if (!url) return res.status(400).json({ error: 'url requerida' });
+
+  let parsed;
+  try { parsed = new URL(url); } catch { return res.json({ ok: false, reason: 'url inválida' }); }
+
+  const proto = parsed.protocol === 'https:' ? https : http;
+  const reqOpts = { method: 'GET', headers: { 'User-Agent': 'MythOS-TV/1.0' }, timeout: 5000 };
+
+  const upReq = proto.request(url, reqOpts, (upRes) => {
+    upRes.destroy();
+    const ok = upRes.statusCode < 400;
+    res.json({ ok, status: upRes.statusCode });
+  });
+  upReq.on('error', (e) => res.json({ ok: false, reason: e.message }));
+  upReq.on('timeout', () => { upReq.destroy(); res.json({ ok: false, reason: 'timeout' }); });
+  upReq.end();
+});
+
+/* ══════════════════════════════════════════════════════════════
+   USERS — registro con PIN, aprobación por admin
+   ══════════════════════════════════════════════════════════════ */
+
+function loadUsers() {
+  try {
+    if (fs.existsSync(USERS_FILE)) return JSON.parse(fs.readFileSync(USERS_FILE, 'utf8'));
+  } catch {}
+  return [];
+}
+
+function saveUsers(users) {
+  fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2), 'utf8');
+}
+
+function hashPin(pin) {
+  return crypto.createHash('sha256').update(String(pin) + 'mytv-pin-salt').digest('hex');
+}
+
+// PUBLIC: registro de nuevo usuario (queda pendiente)
+app.post('/api/users/register', (req, res) => {
+  const { username, pin, emoji } = req.body;
+  if (!username || !pin) return res.status(400).json({ error: 'Nombre y PIN requeridos' });
+  if (!/^\d{4}$/.test(String(pin))) return res.status(400).json({ error: 'PIN debe ser 4 dígitos' });
+
+  const users = loadUsers();
+  const nameTaken = users.some(u => u.username.toLowerCase() === username.toLowerCase());
+  if (nameTaken) return res.status(409).json({ error: 'Ese nombre ya está en uso' });
+
+  const user = {
+    id:        crypto.randomBytes(8).toString('hex'),
+    username:  username.trim(),
+    emoji:     emoji || '🎬',
+    pinHash:   hashPin(pin),
+    status:    'pending',   // pending | active | blocked
+    createdAt: new Date().toISOString(),
+    prefs: {
+      wallpaper:   'default',
+      timeFormat:  '24h',
+      timezone:    'America/Costa_Rica',
+      greeting:    'auto',
+    },
+  };
+  users.push(user);
+  saveUsers(users);
+  res.json({ ok: true, id: user.id });
+});
+
+// PUBLIC: login con nombre + PIN
+app.post('/api/users/login', (req, res) => {
+  const { username, pin } = req.body;
+  if (!username || !pin) return res.status(400).json({ error: 'Nombre y PIN requeridos' });
+
+  const users = loadUsers();
+  const user  = users.find(u => u.username.toLowerCase() === username.toLowerCase());
+  if (!user) return res.status(401).json({ error: 'Usuario no encontrado' });
+  if (user.pinHash !== hashPin(pin)) return res.status(401).json({ error: 'PIN incorrecto' });
+  if (user.status === 'pending')  return res.status(403).json({ error: 'pending' });
+  if (user.status === 'blocked')  return res.status(403).json({ error: 'blocked' });
+
+  // Devolver perfil sin el hash
+  const { pinHash: _, ...safe } = user;
+  res.json({ ok: true, user: safe });
+});
+
+// PUBLIC: guardar prefs de un usuario (autenticado con su PIN)
+app.post('/api/users/prefs', (req, res) => {
+  const { username, pin, prefs } = req.body;
+  if (!username || !pin) return res.status(400).json({ error: 'Credenciales requeridas' });
+
+  const users = loadUsers();
+  const idx   = users.findIndex(u => u.username.toLowerCase() === username.toLowerCase());
+  if (idx === -1) return res.status(404).json({ error: 'Usuario no encontrado' });
+  if (users[idx].pinHash !== hashPin(pin)) return res.status(401).json({ error: 'PIN incorrecto' });
+  if (users[idx].status !== 'active') return res.status(403).json({ error: 'Cuenta no activa' });
+
+  users[idx].prefs = { ...users[idx].prefs, ...prefs };
+  saveUsers(users);
+  res.json({ ok: true, prefs: users[idx].prefs });
+});
+
+// PROTECTED: listar todos los usuarios (admin)
+app.get('/api/admin/users', (req, res) => {
+  if (!checkAuth(req)) return res.status(403).json({ error: 'No autorizado' });
+  const users = loadUsers().map(({ pinHash: _, ...u }) => u);
+  res.json(users);
+});
+
+// PROTECTED: aprobar usuario
+app.post('/api/admin/users/:id/approve', (req, res) => {
+  if (!checkAuth(req)) return res.status(403).json({ error: 'No autorizado' });
+  const users = loadUsers();
+  const user  = users.find(u => u.id === req.params.id);
+  if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
+  user.status = 'active';
+  saveUsers(users);
+  res.json({ ok: true });
+});
+
+// PROTECTED: bloquear usuario
+app.post('/api/admin/users/:id/block', (req, res) => {
+  if (!checkAuth(req)) return res.status(403).json({ error: 'No autorizado' });
+  const users = loadUsers();
+  const user  = users.find(u => u.id === req.params.id);
+  if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
+  user.status = 'blocked';
+  saveUsers(users);
+  res.json({ ok: true });
+});
+
+// PROTECTED: eliminar usuario
+app.delete('/api/admin/users/:id', (req, res) => {
+  if (!checkAuth(req)) return res.status(403).json({ error: 'No autorizado' });
+  let users = loadUsers();
+  const before = users.length;
+  users = users.filter(u => u.id !== req.params.id);
+  if (users.length === before) return res.status(404).json({ error: 'Usuario no encontrado' });
+  saveUsers(users);
+  res.json({ ok: true });
+});
+
+// PROTECTED: reset PIN (admin genera PIN temporal de 4 dígitos)
+app.post('/api/admin/users/:id/reset-pin', (req, res) => {
+  if (!checkAuth(req)) return res.status(403).json({ error: 'No autorizado' });
+  const users = loadUsers();
+  const user  = users.find(u => u.id === req.params.id);
+  if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
+  const tempPin = String(Math.floor(1000 + Math.random() * 9000));
+  user.pinHash  = hashPin(tempPin);
+  saveUsers(users);
+  res.json({ ok: true, tempPin });
+});
+
 app.listen(PORT, '127.0.0.1', () => {
   console.log(`[MythOS TV] API server running on http://127.0.0.1:${PORT}`);
   // Init config if not exists

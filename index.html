@@ -27,6 +27,94 @@
 </head>
 <body>
 
+  <!-- ═══════════════════════════════════════════ USER LOGIN/REGISTER -->
+  <div id="user-screen" style="
+    position:fixed;inset:0;z-index:2000;
+    background:#070710;
+    display:none;align-items:center;justify-content:center;
+    font-family:'Inter',sans-serif;
+  ">
+    <div style="width:360px;max-width:90vw;">
+      <div style="text-align:center;margin-bottom:32px;">
+        <div style="font-family:'Orbitron',sans-serif;font-size:1.6rem;font-weight:700;
+          background:linear-gradient(135deg,#7c6af7,#3ecfcf);-webkit-background-clip:text;-webkit-text-fill-color:transparent;
+          margin-bottom:6px;">MythOS TV</div>
+        <div style="font-size:0.8rem;color:rgba(255,255,255,0.35);" id="user-screen-subtitle">Tu espacio de entretenimiento</div>
+      </div>
+
+      <!-- Panel login -->
+      <div id="user-login-panel">
+        <div style="margin-bottom:14px;">
+          <div style="font-size:0.7rem;font-weight:600;color:rgba(255,255,255,0.35);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px;">Usuario</div>
+          <input type="text" id="user-login-name" placeholder="Tu nombre de usuario"
+            style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);
+            border-radius:10px;padding:11px 14px;color:#f0f0fa;font-size:0.9rem;font-family:inherit;outline:none;" />
+        </div>
+        <div style="margin-bottom:20px;">
+          <div style="font-size:0.7rem;font-weight:600;color:rgba(255,255,255,0.35);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px;">PIN (4 dígitos)</div>
+          <input type="password" id="user-login-pin" placeholder="••••" maxlength="4" inputmode="numeric"
+            style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);
+            border-radius:10px;padding:11px 14px;color:#f0f0fa;font-size:1.2rem;letter-spacing:0.3em;font-family:inherit;outline:none;" />
+        </div>
+        <button id="user-login-btn" onclick="doUserLogin()"
+          style="width:100%;background:linear-gradient(135deg,#7c6af7,#3ecfcf);border:none;color:#fff;
+          padding:13px;border-radius:10px;font-size:0.92rem;font-weight:600;font-family:inherit;cursor:pointer;margin-bottom:12px;">
+          Entrar
+        </button>
+        <div id="user-login-error" style="color:#ef4444;font-size:0.78rem;text-align:center;min-height:20px;"></div>
+        <div style="text-align:center;margin-top:16px;">
+          <button onclick="showUserRegister()"
+            style="background:none;border:none;color:rgba(255,255,255,0.35);font-size:0.8rem;cursor:pointer;font-family:inherit;text-decoration:underline;">
+            ¿Primera vez? Crear cuenta
+          </button>
+        </div>
+      </div>
+
+      <!-- Panel registro -->
+      <div id="user-register-panel" style="display:none;">
+        <div style="margin-bottom:12px;">
+          <div style="font-size:0.7rem;font-weight:600;color:rgba(255,255,255,0.35);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px;">Nombre de usuario</div>
+          <input type="text" id="user-reg-name" placeholder="Cómo te llamas"
+            style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);
+            border-radius:10px;padding:11px 14px;color:#f0f0fa;font-size:0.9rem;font-family:inherit;outline:none;" />
+        </div>
+        <div style="margin-bottom:12px;">
+          <div style="font-size:0.7rem;font-weight:600;color:rgba(255,255,255,0.35);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:8px;">Elige tu avatar</div>
+          <div id="user-emoji-picker" style="display:flex;flex-wrap:wrap;gap:8px;">
+            ${'🎬 🎮 🎵 🌙 🚀 🦁 🐉 🌊 ⚡ 🎯 🔥 🌟 🎭 🤖 🦊 🐺'.split(' ').map(e =>
+              `<button onclick="selectEmoji(this,'${e}')" style="
+                width:38px;height:38px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);
+                border-radius:8px;font-size:1.2rem;cursor:pointer;transition:0.15s;">${e}</button>`).join('')}
+          </div>
+        </div>
+        <div style="margin-bottom:12px;">
+          <div style="font-size:0.7rem;font-weight:600;color:rgba(255,255,255,0.35);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px;">PIN (4 dígitos)</div>
+          <input type="password" id="user-reg-pin" placeholder="••••" maxlength="4" inputmode="numeric"
+            style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);
+            border-radius:10px;padding:11px 14px;color:#f0f0fa;font-size:1.2rem;letter-spacing:0.3em;font-family:inherit;outline:none;" />
+        </div>
+        <div style="margin-bottom:20px;">
+          <div style="font-size:0.7rem;font-weight:600;color:rgba(255,255,255,0.35);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px;">Confirmar PIN</div>
+          <input type="password" id="user-reg-pin2" placeholder="••••" maxlength="4" inputmode="numeric"
+            style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);
+            border-radius:10px;padding:11px 14px;color:#f0f0fa;font-size:1.2rem;letter-spacing:0.3em;font-family:inherit;outline:none;" />
+        </div>
+        <button onclick="doUserRegister()"
+          style="width:100%;background:linear-gradient(135deg,#7c6af7,#3ecfcf);border:none;color:#fff;
+          padding:13px;border-radius:10px;font-size:0.92rem;font-weight:600;font-family:inherit;cursor:pointer;margin-bottom:12px;">
+          Crear cuenta
+        </button>
+        <div id="user-reg-error" style="color:#ef4444;font-size:0.78rem;text-align:center;min-height:20px;"></div>
+        <div style="text-align:center;margin-top:12px;">
+          <button onclick="showUserLogin()"
+            style="background:none;border:none;color:rgba(255,255,255,0.35);font-size:0.8rem;cursor:pointer;font-family:inherit;text-decoration:underline;">
+            Ya tengo cuenta
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- ═══════════════════════════════════════════ BOOT SCREEN -->
   <div id="boot-screen" class="boot-screen">
     <div class="boot-logo">
@@ -244,41 +332,40 @@
   <audio id="snd-enter" src="" preload="none"></audio>
 
   <!-- PWA INSTALL BANNER -->
+  <!-- PWA INSTALL BANNER — detecta navegador/plataforma automáticamente -->
   <div id="pwa-banner" style="
     position:fixed;bottom:24px;left:50%;transform:translateX(-50%);
-    z-index:800;
-    background:rgba(14,13,30,0.97);
-    border:1px solid rgba(124,106,247,0.35);
-    border-radius:14px;
-    padding:14px 20px;
-    display:none;
-    align-items:center;gap:16px;
-    box-shadow:0 8px 32px rgba(0,0,0,0.6), 0 0 0 1px rgba(124,106,247,0.15);
-    backdrop-filter:blur(16px);
-    min-width:340px;max-width:90vw;
+    z-index:800;display:none;flex-direction:column;gap:0;
+    background:rgba(10,9,25,0.98);
+    border:1px solid rgba(124,106,247,0.4);
+    border-radius:16px;
+    box-shadow:0 8px 40px rgba(0,0,0,0.7),0 0 0 1px rgba(124,106,247,0.12);
+    backdrop-filter:blur(20px);
+    min-width:340px;max-width:92vw;
     font-family:'Inter',sans-serif;
+    overflow:hidden;
   ">
-    <div style="font-size:1.8rem;flex-shrink:0;">📺</div>
-    <div style="flex:1;min-width:0;">
-      <div style="font-size:0.85rem;font-weight:500;color:#f0f0fa;margin-bottom:2px;">
-        Instalar MythOS TV
+    <!-- Header -->
+    <div style="display:flex;align-items:center;gap:14px;padding:14px 16px 10px;">
+      <div style="font-size:1.7rem;flex-shrink:0;">📺</div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:0.88rem;font-weight:600;color:#f0f0fa;">Instalar MythOS TV</div>
+        <div id="pwa-banner-subtitle" style="font-size:0.72rem;color:rgba(255,255,255,0.4);margin-top:1px;">Experiencia de TV nativa</div>
       </div>
-      <div style="font-size:0.75rem;color:rgba(255,255,255,0.45);">
-        Instala la app para una experiencia de TV nativa
-      </div>
+      <button id="pwa-dismiss-btn" style="background:none;border:none;color:rgba(255,255,255,0.3);font-size:1.1rem;cursor:pointer;padding:4px;flex-shrink:0;line-height:1;">✕</button>
     </div>
-    <button id="pwa-install-btn" style="
-      background:linear-gradient(90deg,#7c6af7,#3ecfcf);
-      border:none;color:#fff;
-      padding:8px 18px;border-radius:8px;
-      font-size:0.8rem;font-weight:500;
-      cursor:pointer;flex-shrink:0;white-space:nowrap;
-    ">Instalar</button>
-    <button id="pwa-dismiss-btn" style="
-      background:none;border:none;color:rgba(255,255,255,0.35);
-      font-size:1.2rem;cursor:pointer;padding:4px;flex-shrink:0;
-      line-height:1;
-    ">✕</button>
+    <!-- Instrucciones manuales (se muestra cuando no hay prompt automático) -->
+    <div id="pwa-steps" style="display:none;padding:0 16px 14px;border-top:1px solid rgba(255,255,255,0.06);margin-top:4px;padding-top:12px;">
+      <div id="pwa-steps-content" style="font-size:0.78rem;color:rgba(255,255,255,0.6);line-height:1.7;"></div>
+    </div>
+    <!-- Botones -->
+    <div style="display:flex;gap:8px;padding:0 16px 14px;">
+      <button id="pwa-install-btn" style="
+        flex:1;background:linear-gradient(90deg,#7c6af7,#3ecfcf);
+        border:none;color:#fff;padding:10px 16px;border-radius:9px;
+        font-size:0.82rem;font-weight:600;cursor:pointer;
+      ">Instalar</button>
+    </div>
   </div>
 
   <!-- HLS.js player -->
@@ -293,27 +380,127 @@
       });
     }
 
-    // PWA Install prompt
+    /* ── PWA Install — detección universal de navegador/plataforma ── */
     let _pwaPrompt = null;
+
+    function detectPlatform() {
+      const ua  = navigator.userAgent.toLowerCase();
+      const isIOS     = /iphone|ipad|ipod/.test(ua);
+      const isSafari  = /safari/.test(ua) && !/chrome|chromium|brave/.test(ua);
+      const isBrave   = navigator.brave?.isBrave || /brave/.test(ua);
+      const isFirefox = /firefox/.test(ua);
+      const isAndroid = /android/.test(ua);
+      const isTV      = /tv|smart-tv|googletv|androidtv|webos|tizen|netcast|viera|hbbtv/.test(ua);
+      const isChrome  = /chrome|chromium/.test(ua) && !isBrave;
+      const isSamsung = /samsungbrowser/.test(ua);
+
+      if (isIOS && isSafari) return 'ios-safari';
+      if (isIOS)             return 'ios-other';
+      if (isTV)              return 'android-tv';
+      if (isSamsung)         return 'samsung';
+      if (isFirefox)         return 'firefox';
+      if (isBrave)           return 'brave';
+      if (isAndroid)         return 'android-chrome';
+      return 'desktop-chrome';
+    }
+
+    const PWA_INSTRUCTIONS = {
+      'ios-safari': {
+        subtitle: 'iPhone / iPad — Safari',
+        steps: '1. Toca el botón <strong>Compartir</strong> (□↑) en la barra de Safari<br>2. Desplázate y toca <strong>"Agregar a pantalla de inicio"</strong><br>3. Confirma tocando <strong>Agregar</strong>',
+        btnLabel: 'Ver instrucciones ↑',
+        manual: true,
+      },
+      'ios-other': {
+        subtitle: 'iOS — abre en Safari para instalar',
+        steps: 'Para instalar MythOS TV en iOS necesitás usar <strong>Safari</strong>.<br>Abrí esta página en Safari y usá <strong>Compartir → Agregar a pantalla de inicio</strong>.',
+        btnLabel: 'Entendido',
+        manual: true,
+      },
+      'android-tv': {
+        subtitle: 'Android TV / TV Box',
+        steps: '1. Tocá el ícono <strong>⋮ Menú</strong> o <strong>Configuración</strong> del navegador<br>2. Buscá <strong>"Instalar app"</strong> o <strong>"Agregar a pantalla de inicio"</strong><br>3. Confirmá la instalación',
+        btnLabel: 'Ver instrucciones',
+        manual: true,
+      },
+      'samsung': {
+        subtitle: 'Samsung Browser',
+        steps: '1. Toca el ícono <strong>☰ Menú</strong> abajo a la derecha<br>2. Toca <strong>"Agregar página a"</strong> → <strong>"Pantalla de inicio"</strong><br>3. Confirmá tocando <strong>Agregar</strong>',
+        btnLabel: 'Ver instrucciones',
+        manual: true,
+      },
+      'firefox': {
+        subtitle: 'Firefox',
+        steps: '1. Toca el ícono <strong>⋮</strong> o <strong>☰</strong> del menú<br>2. Toca <strong>"Instalar"</strong> o <strong>"Agregar a pantalla de inicio"</strong><br>(Firefox Android soporta PWA desde v90+)',
+        btnLabel: 'Ver instrucciones',
+        manual: true,
+      },
+      'brave': {
+        subtitle: 'Brave Browser',
+        steps: '1. Toca el ícono <strong>⋮</strong> arriba a la derecha<br>2. Toca <strong>"Instalar app"</strong> o <strong>"Agregar a pantalla de inicio"</strong><br>3. Confirmá la instalación',
+        btnLabel: 'Ver instrucciones',
+        manual: true,
+      },
+      'android-chrome': {
+        subtitle: 'Android — Chrome',
+        steps: '',
+        btnLabel: 'Instalar',
+        manual: false,
+      },
+      'desktop-chrome': {
+        subtitle: 'Instalá como app de escritorio',
+        steps: '',
+        btnLabel: 'Instalar',
+        manual: false,
+      },
+    };
+
+    function showPWABanner() {
+      if (localStorage.getItem('pwa-dismissed')) return;
+      const platform = detectPlatform();
+      const info     = PWA_INSTRUCTIONS[platform] || PWA_INSTRUCTIONS['desktop-chrome'];
+      const banner   = document.getElementById('pwa-banner');
+      const subtitle = document.getElementById('pwa-banner-subtitle');
+      const stepsDiv = document.getElementById('pwa-steps');
+      const stepsCnt = document.getElementById('pwa-steps-content');
+      const installBtn = document.getElementById('pwa-install-btn');
+
+      subtitle.textContent = info.subtitle;
+      installBtn.textContent = info.btnLabel;
+
+      if (info.manual) {
+        // Sin prompt automático — mostrar instrucciones paso a paso
+        stepsDiv.style.display = 'block';
+        stepsCnt.innerHTML = info.steps;
+        installBtn.onclick = () => {
+          // Toggle instrucciones si ya están visibles, o solo cerrar
+          banner.style.display = 'none';
+          localStorage.setItem('pwa-dismissed', '1');
+        };
+      } else {
+        // Tiene prompt automático (Chrome/Edge)
+        stepsDiv.style.display = 'none';
+        installBtn.onclick = async () => {
+          if (!_pwaPrompt) return;
+          _pwaPrompt.prompt();
+          const { outcome } = await _pwaPrompt.userChoice;
+          _pwaPrompt = null;
+          banner.style.display = 'none';
+        };
+      }
+
+      banner.style.display = 'flex';
+    }
+
+    // Capturar prompt automático (Chrome/Edge)
     window.addEventListener('beforeinstallprompt', e => {
       e.preventDefault();
       _pwaPrompt = e;
-      // Solo mostrar si no fue descartado antes
-      if (!localStorage.getItem('pwa-dismissed')) {
-        setTimeout(() => {
-          const banner = document.getElementById('pwa-banner');
-          if (banner) banner.style.display = 'flex';
-        }, 3000); // Esperar 3s para no interrumpir el boot
-      }
+      setTimeout(showPWABanner, 3500);
     });
 
-    document.getElementById('pwa-install-btn')?.addEventListener('click', async () => {
-      if (!_pwaPrompt) return;
-      _pwaPrompt.prompt();
-      const { outcome } = await _pwaPrompt.userChoice;
-      _pwaPrompt = null;
-      document.getElementById('pwa-banner').style.display = 'none';
-    });
+    // Para navegadores sin beforeinstallprompt: se llama desde app.js post-boot
+    // via triggerPWABanner() para no interferir con la pantalla de login
 
     document.getElementById('pwa-dismiss-btn')?.addEventListener('click', () => {
       document.getElementById('pwa-banner').style.display = 'none';
@@ -326,5 +513,135 @@
       localStorage.setItem('pwa-dismissed', '1');
     }
   </script>
+
+  <script>
+    /* ── User login / register ── */
+    let _selectedEmoji = '🎬';
+    let _currentUser   = null;  // { username, emoji, prefs, ... }
+
+    function showUserLogin() {
+      document.getElementById('user-login-panel').style.display = '';
+      document.getElementById('user-register-panel').style.display = 'none';
+      document.getElementById('user-screen-subtitle').textContent = 'Tu espacio de entretenimiento';
+      document.getElementById('user-login-error').textContent = '';
+    }
+
+    function showUserRegister() {
+      document.getElementById('user-login-panel').style.display = 'none';
+      document.getElementById('user-register-panel').style.display = '';
+      document.getElementById('user-screen-subtitle').textContent = 'Crea tu perfil';
+      document.getElementById('user-reg-error').textContent = '';
+    }
+
+    function selectEmoji(btn, emoji) {
+      _selectedEmoji = emoji;
+      document.querySelectorAll('#user-emoji-picker button').forEach(b => {
+        b.style.background = 'rgba(255,255,255,0.06)';
+        b.style.borderColor = 'rgba(255,255,255,0.1)';
+      });
+      btn.style.background = 'rgba(124,106,247,0.3)';
+      btn.style.borderColor = '#7c6af7';
+    }
+
+    async function doUserLogin() {
+      const username = document.getElementById('user-login-name').value.trim();
+      const pin      = document.getElementById('user-login-pin').value.trim();
+      const errEl    = document.getElementById('user-login-error');
+      errEl.textContent = '';
+      if (!username || !pin) { errEl.textContent = 'Completa todos los campos'; return; }
+
+      try {
+        const r    = await fetch('/api/users/login', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, pin }),
+        });
+        const data = await r.json();
+        if (data.ok) {
+          _currentUser = { ...data.user, pin };  // guardamos pin en memoria para guardar prefs
+          sessionStorage.setItem('mytv-user', JSON.stringify({ username, pin }));
+          enterApp();
+        } else {
+          if (data.error === 'pending')  errEl.textContent = '⏳ Tu cuenta está pendiente de aprobación';
+          else if (data.error === 'blocked') errEl.textContent = '🚫 Tu cuenta ha sido bloqueada';
+          else errEl.textContent = data.error || 'Error al iniciar sesión';
+        }
+      } catch (e) { errEl.textContent = 'Error de conexión con el servidor'; }
+    }
+
+    async function doUserRegister() {
+      const username = document.getElementById('user-reg-name').value.trim();
+      const pin      = document.getElementById('user-reg-pin').value.trim();
+      const pin2     = document.getElementById('user-reg-pin2').value.trim();
+      const errEl    = document.getElementById('user-reg-error');
+      errEl.textContent = '';
+
+      if (!username || !pin) { errEl.textContent = 'Completa todos los campos'; return; }
+      if (!/^\d{4}$/.test(pin)) { errEl.textContent = 'El PIN debe ser exactamente 4 dígitos'; return; }
+      if (pin !== pin2) { errEl.textContent = 'Los PINs no coinciden'; return; }
+
+      try {
+        const r    = await fetch('/api/users/register', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, pin, emoji: _selectedEmoji }),
+        });
+        const data = await r.json();
+        if (data.ok) {
+          errEl.style.color = '#22c55e';
+          errEl.textContent = '✅ Cuenta creada. Espera que el admin te apruebe para entrar.';
+          setTimeout(showUserLogin, 2500);
+        } else {
+          errEl.style.color = '#ef4444';
+          errEl.textContent = data.error || 'Error al registrar';
+        }
+      } catch (e) { errEl.textContent = 'Error de conexión con el servidor'; }
+    }
+
+    function enterApp() {
+      document.getElementById('user-screen').style.display = 'none';
+      // Aplicar prefs del usuario antes del boot
+      if (_currentUser?.prefs) window._userPrefs = _currentUser.prefs;
+      boot();
+      // Banner PWA después del boot (funciona en todos los navegadores)
+      setTimeout(() => {
+        if (typeof showPWABanner === 'function' && !localStorage.getItem('pwa-dismissed')) {
+          showPWABanner();
+        }
+      }, 5000);
+    }
+
+    // Auto-login si hay sesión guardada
+    window.addEventListener('DOMContentLoaded', async () => {
+      const saved = sessionStorage.getItem('mytv-user');
+      if (saved) {
+        try {
+          const { username, pin } = JSON.parse(saved);
+          const r    = await fetch('/api/users/login', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, pin }),
+          });
+          const data = await r.json();
+          if (data.ok) {
+            _currentUser = { ...data.user, pin };
+            enterApp();
+            return;
+          }
+        } catch {}
+        sessionStorage.removeItem('mytv-user');
+      }
+      // Sin sesión válida → mostrar pantalla de login
+      const scr = document.getElementById('user-screen');
+      if (scr) scr.style.display = 'flex';
+      try { document.getElementById('user-login-name').focus(); } catch {}
+    });
+
+    // Enter en los inputs
+    ['user-login-name','user-login-pin'].forEach(id => {
+      document.getElementById(id)?.addEventListener('keydown', e => { if (e.key === 'Enter') doUserLogin(); });
+    });
+    ['user-reg-pin','user-reg-pin2'].forEach(id => {
+      document.getElementById(id)?.addEventListener('keydown', e => { if (e.key === 'Enter') doUserRegister(); });
+    });
+  </script>
+
 </body>
 </html>

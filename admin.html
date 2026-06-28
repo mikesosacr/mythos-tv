@@ -199,6 +199,9 @@
       <div class="sb-section">Importar</div>
       <div class="sb-item" data-page="m3u" onclick="showPage('m3u')"><span class="icon">📥</span> M3U / Threadfin</div>
 
+      <div class="sb-section">Usuarios</div>
+      <div class="sb-item" data-page="users" onclick="showPage('users')"><span class="icon">👥</span> Usuarios</div>
+
       <div class="sb-section">Avanzado</div>
       <div class="sb-item" data-page="cache" onclick="showPage('cache')"><span class="icon">🗑️</span> Caché / SW</div>
       <div class="sb-item" data-page="security" onclick="showPage('security')"><span class="icon">🔐</span> Seguridad</div>
@@ -215,6 +218,7 @@
           <div class="stat-card"><div class="stat-value c-orange" id="stat-movies">—</div><div class="stat-label">Películas VOD</div></div>
           <div class="stat-card"><div class="stat-value c-green" id="stat-radio">—</div><div class="stat-label">Radios</div></div>
           <div class="stat-card"><div class="stat-value c-purple" id="stat-apps">—</div><div class="stat-label">Apps Launcher</div></div>
+          <div class="stat-card"><div class="stat-value" id="stat-users" style="color:#f59e0b;">—</div><div class="stat-label">Usuarios registrados</div></div>
         </div>
         <div class="card">
           <div class="card-title"><span class="dot"></span> Acceso rápido</div>
@@ -297,7 +301,55 @@
 
       <!-- RADIO -->
       <section class="page" id="page-radio">
-        <div class="page-header"><div><div class="page-title">Radio</div><div class="page-subtitle">Streams de audio</div></div><div class="header-actions"><button class="btn btn-secondary" onclick="addRow('radio')">➕ Estación</button><button class="btn btn-primary" onclick="saveAll('radio')">💾 Guardar</button></div></div>
+        <div class="page-header">
+          <div><div class="page-title">Radio</div><div class="page-subtitle">Streams de audio</div></div>
+          <div class="header-actions">
+            <button class="btn btn-secondary" onclick="addRow('radio')">➕ Estación</button>
+            <button class="btn btn-primary" onclick="saveAll('radio')">💾 Guardar</button>
+          </div>
+        </div>
+
+        <!-- Importador M3U para Radio -->
+        <div class="card">
+          <div class="card-title"><span class="dot" style="background:#7c6af7;"></span> Importar lista M3U</div>
+          <div class="m3u-tabs" id="radio-m3u-tabs">
+            <button class="m3u-tab active" onclick="radioM3UTab('url')">🔗 URL</button>
+            <button class="m3u-tab" onclick="radioM3UTab('file')">📁 Archivo</button>
+            <button class="m3u-tab" onclick="radioM3UTab('paste')">📋 Pegar texto</button>
+          </div>
+          <div class="m3u-panel active" id="radio-m3u-panel-url">
+            <div style="display:flex;gap:8px;">
+              <input type="text" id="radio-m3u-url" class="settings-input" placeholder="https://..." style="flex:1;" />
+              <button class="btn btn-secondary" onclick="radioM3UFetch()">📥 Cargar</button>
+            </div>
+          </div>
+          <div class="m3u-panel" id="radio-m3u-panel-file">
+            <input type="file" id="radio-m3u-file" accept=".m3u,.m3u8,.txt" onchange="radioM3UFile()" style="color:var(--text);font-size:0.82rem;" />
+          </div>
+          <div class="m3u-panel" id="radio-m3u-panel-paste">
+            <textarea id="radio-m3u-paste" class="settings-input" rows="5" placeholder="#EXTM3U&#10;#EXTINF:-1,Mi Radio&#10;http://stream.example.com/live" style="width:100%;resize:vertical;font-family:monospace;font-size:0.78rem;"></textarea>
+            <button class="btn btn-secondary btn-sm" onclick="radioM3UPaste()" style="margin-top:6px;">📥 Procesar</button>
+          </div>
+          <div class="import-result" id="radio-import-result"></div>
+
+          <!-- Preview -->
+          <div id="radio-m3u-preview-card" style="display:none;margin-top:14px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+              <div style="font-size:0.82rem;color:var(--muted);">
+                <span id="radio-m3u-count">0</span> estaciones encontradas
+                <span id="radio-m3u-alive-badge" style="display:none;margin-left:8px;padding:2px 8px;background:rgba(34,197,94,0.12);border:1px solid rgba(34,197,94,0.3);border-radius:6px;color:#22c55e;font-size:0.72rem;"></span>
+              </div>
+              <div style="display:flex;gap:6px;">
+                <button class="btn btn-secondary btn-sm" onclick="radioM3UVerify()" id="radio-verify-btn">🔍 Verificar streams</button>
+                <button class="btn btn-success btn-sm" onclick="radioM3UImport('add')">✅ Agregar a Radio</button>
+                <button class="btn btn-secondary btn-sm" onclick="radioM3UImport('replace')">🔄 Reemplazar todo</button>
+              </div>
+            </div>
+            <div id="radio-m3u-preview-list" style="max-height:280px;overflow-y:auto;"></div>
+          </div>
+        </div>
+
+        <!-- Lista actual -->
         <div class="card">
           <div class="card-title"><span class="dot"></span> Estaciones <span class="tag" id="radio-count">0</span></div>
           <div style="display:grid;grid-template-columns:48px 1fr 100px 1fr 36px;gap:8px;padding:0 12px 8px;font-size:0.65rem;font-weight:700;letter-spacing:0.07em;color:var(--muted2);text-transform:uppercase;">
@@ -351,6 +403,36 @@
       </section>
 
       <!-- CACHE -->
+
+      <!-- USUARIOS -->
+      <section class="page" id="page-users">
+        <div class="page-header">
+          <div><div class="page-title">Usuarios</div><div class="page-subtitle">Gestión de perfiles de acceso</div></div>
+          <div class="header-actions"><button class="btn btn-secondary" onclick="loadUsers()">🔄 Actualizar</button></div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:20px;">
+          <div class="stat-card"><div class="stat-value" id="u-stat-pending" style="color:#f59e0b;">—</div><div class="stat-label">Pendientes</div></div>
+          <div class="stat-card"><div class="stat-value" id="u-stat-active" style="color:#22c55e;">—</div><div class="stat-label">Activos</div></div>
+          <div class="stat-card"><div class="stat-value" id="u-stat-blocked" style="color:#ef4444;">—</div><div class="stat-label">Bloqueados</div></div>
+        </div>
+
+        <div class="card">
+          <div class="card-title"><span class="dot" style="background:#f59e0b;"></span> Pendientes de aprobación</div>
+          <div id="users-pending-list"><div style="color:var(--muted);font-size:0.8rem;">Cargando…</div></div>
+        </div>
+
+        <div class="card">
+          <div class="card-title"><span class="dot" style="background:#22c55e;"></span> Usuarios activos</div>
+          <div id="users-active-list"><div style="color:var(--muted);font-size:0.8rem;">Cargando…</div></div>
+        </div>
+
+        <div class="card">
+          <div class="card-title"><span class="dot" style="background:#ef4444;"></span> Bloqueados</div>
+          <div id="users-blocked-list"><div style="color:var(--muted);font-size:0.8rem;">Cargando…</div></div>
+        </div>
+      </section>
+
       <section class="page" id="page-cache">
         <div class="page-header"><div><div class="page-title">Caché & Service Worker</div><div class="page-subtitle">Solución de problemas de actualización</div></div></div>
         <div class="card">
@@ -495,7 +577,7 @@ function showPage(id) {
   document.querySelectorAll('.sb-item').forEach(s => s.classList.remove('active'));
   document.getElementById('page-' + id).classList.add('active');
   document.querySelector(`[data-page="${id}"]`).classList.add('active');
-  const fn = { dashboard: renderDash, system: renderSystem, launcher: renderLauncher, livetv: () => renderList('livetv'), movies: () => renderList('movies'), radio: () => renderList('radio'), cache: checkSWStatus };
+  const fn = { dashboard: renderDash, system: renderSystem, launcher: renderLauncher, livetv: () => renderList('livetv'), movies: () => renderList('movies'), radio: () => renderList('radio'), cache: checkSWStatus, users: loadUsers };
   if (fn[id]) fn[id]();
 }
 
@@ -508,6 +590,7 @@ function renderDash() {
   document.getElementById('stat-movies').textContent = CFG.movies?.length  || 0;
   document.getElementById('stat-radio').textContent  = CFG.radio?.length   || 0;
   document.getElementById('stat-apps').textContent   = CFG.launcher?.length|| 0;
+  loadUsers();
   document.getElementById('dash-info').innerHTML = `
     <span>🏷️ Nombre: <strong>${CFG.systemName || 'MythOS TV'}</strong></span><br/>
     <span>🎨 Wallpaper: <strong>${CFG.wallpaper || 'default'}</strong></span><br/>
@@ -775,6 +858,261 @@ function showResult(type, msg) {
   const el = document.getElementById('import-result');
   el.textContent = msg;
   el.className   = `import-result show ${type}`;
+}
+
+/* ══════════════════════════════════════════
+   RADIO M3U IMPORTER
+   ══════════════════════════════════════════ */
+let _radioM3UParsed = [];
+
+function radioM3UTab(tab) {
+  ['url','file','paste'].forEach(t => {
+    document.getElementById(`radio-m3u-panel-${t}`).classList.toggle('active', t === tab);
+    document.querySelectorAll('#radio-m3u-tabs .m3u-tab')[['url','file','paste'].indexOf(t)]
+      .classList.toggle('active', t === tab);
+  });
+}
+
+function showRadioResult(type, msg) {
+  const el = document.getElementById('radio-import-result');
+  el.textContent = msg;
+  el.className   = `import-result show ${type}`;
+}
+
+async function radioM3UFetch() {
+  const url = document.getElementById('radio-m3u-url').value.trim();
+  if (!url) { showRadioResult('error','⚠️ Ingresa una URL'); return; }
+  showRadioResult('info','⏳ Descargando lista...');
+  try {
+    const r    = await fetch(`${API}/admin/fetch-m3u?url=${encodeURIComponent(url)}`, { headers:{'X-Admin-Token':TOKEN} });
+    const text = await r.text();
+    processRadioM3U(text);
+  } catch (e) { showRadioResult('error','❌ Error: ' + e.message); }
+}
+
+function radioM3UFile() {
+  const file = document.getElementById('radio-m3u-file').files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => processRadioM3U(e.target.result);
+  reader.readAsText(file);
+}
+
+function radioM3UPaste() {
+  const text = document.getElementById('radio-m3u-paste').value;
+  if (!text.trim()) { showRadioResult('error','⚠️ Pega el contenido M3U'); return; }
+  processRadioM3U(text);
+}
+
+const GENRE_EMOJI = {
+  'latin':'🎸','rock':'🎸','pop':'🎵','jazz':'🎷','christian':'✝️','news':'📰',
+  'talk':'📰','tropical':'🌴','chill':'🌊','electronic':'🎛️','classic':'🎻',
+  'country':'🤠','hip':'🎤','reggae':'🌿','salsa':'💃','cumbia':'💃',
+  'adult':'🎵','variety':'🎭','folk':'🪕','new age':'🧘','hits':'⭐',
+};
+
+function genreToEmoji(genre) {
+  if (!genre) return '📻';
+  const g = genre.toLowerCase();
+  for (const [k,v] of Object.entries(GENRE_EMOJI)) {
+    if (g.includes(k)) return v;
+  }
+  return '📻';
+}
+
+function processRadioM3U(text) {
+  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+  if (!lines[0]?.startsWith('#EXTM3U')) { showRadioResult('error','⚠️ No parece un M3U válido'); return; }
+
+  _radioM3UParsed = [];
+  let cur = null;
+
+  for (const line of lines) {
+    if (line.startsWith('#EXTINF:')) {
+      const tvgName = line.match(/tvg-name="([^"]+)"/);
+      const group   = line.match(/group-title="([^"]+)"/);
+      const nameEnd = line.match(/,(.+)$/);
+      const genre   = (group?.[1] || '').trim();
+      cur = {
+        name:  (tvgName?.[1] || nameEnd?.[1] || 'Sin nombre').trim(),
+        genre: genre || 'General',
+        emoji: genreToEmoji(genre),
+        url:   '',
+        _alive: null,
+      };
+    } else if (line.startsWith('#')) {
+      // skip otros comentarios
+    } else if (cur && /^https?:/.test(line)) {
+      cur.url = line;
+      _radioM3UParsed.push(cur);
+      cur = null;
+    }
+  }
+
+  if (!_radioM3UParsed.length) { showRadioResult('error','⚠️ Sin entradas encontradas'); return; }
+  showRadioResult('ok', `✅ ${_radioM3UParsed.length} estaciones encontradas`);
+  document.getElementById('radio-m3u-alive-badge').style.display = 'none';
+  document.getElementById('radio-verify-btn').textContent = '🔍 Verificar streams';
+  renderRadioM3UPreview();
+  document.getElementById('radio-m3u-preview-card').style.display = 'block';
+}
+
+function renderRadioM3UPreview() {
+  document.getElementById('radio-m3u-count').textContent = _radioM3UParsed.length;
+  const list = document.getElementById('radio-m3u-preview-list');
+  list.innerHTML = _radioM3UParsed.slice(0,80).map((r,i) => `
+    <div class="item-row" style="grid-template-columns:32px 32px 1fr 110px 1fr;font-size:0.78rem;opacity:${r._alive===false?'0.4':'1'}">
+      <span style="text-align:center;font-size:0.85rem;">
+        ${r._alive===true?'✅':r._alive===false?'❌':'⬜'}
+      </span>
+      <span style="text-align:center;">${r.emoji}</span>
+      <span>${esc(r.name)}</span>
+      <span style="color:var(--muted);font-size:0.72rem;">${esc(r.genre)}</span>
+      <span style="font-family:monospace;font-size:0.68rem;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(r.url)}</span>
+    </div>`).join('') +
+    (_radioM3UParsed.length > 80 ? `<div style="text-align:center;padding:10px;color:var(--muted);font-size:0.78rem;">... y ${_radioM3UParsed.length-80} más</div>` : '');
+}
+
+async function radioM3UVerify() {
+  if (!_radioM3UParsed.length) return;
+  const btn = document.getElementById('radio-verify-btn');
+  btn.disabled = true;
+  btn.textContent = '⏳ Verificando...';
+  showRadioResult('info', `⏳ Verificando ${_radioM3UParsed.length} streams... esto puede tardar.`);
+
+  let alive = 0, dead = 0;
+  for (let i = 0; i < _radioM3UParsed.length; i++) {
+    const r = _radioM3UParsed[i];
+    try {
+      const resp = await fetch(`${API}/admin/check-stream?url=${encodeURIComponent(r.url)}`, {
+        headers:{'X-Admin-Token':TOKEN}
+      });
+      const data = await resp.json();
+      r._alive = data.ok;
+      if (data.ok) alive++; else dead++;
+    } catch {
+      r._alive = false;
+      dead++;
+    }
+    if (i % 5 === 0) renderRadioM3UPreview(); // actualizar vista cada 5
+  }
+
+  renderRadioM3UPreview();
+  const badge = document.getElementById('radio-m3u-alive-badge');
+  badge.textContent = `${alive} vivas · ${dead} muertas`;
+  badge.style.display = '';
+  btn.disabled = false;
+  btn.textContent = '🔍 Verificar streams';
+  showRadioResult(alive > 0 ? 'ok' : 'error', `✅ ${alive} activas · ❌ ${dead} inactivas`);
+}
+
+async function radioM3UImport(mode) {
+  if (!_radioM3UParsed.length || !CFG) return;
+
+  // Si hay verificación, preguntar si importar solo las vivas
+  const hasVerified = _radioM3UParsed.some(r => r._alive !== null);
+  const aliveOnly   = hasVerified && _radioM3UParsed.some(r => r._alive === true)
+    ? confirm('¿Importar solo las estaciones verificadas como activas?')
+    : false;
+
+  const toImport = (aliveOnly ? _radioM3UParsed.filter(r => r._alive === true) : _radioM3UParsed)
+    .map(({name, genre, emoji, url}) => ({name, genre, emoji, url}));
+
+  if (!toImport.length) { showRadioResult('error','⚠️ Sin estaciones para importar'); return; }
+
+  if (mode === 'replace') {
+    CFG.radio = toImport;
+  } else {
+    CFG.radio = [...(CFG.radio || []), ...toImport];
+  }
+
+  try {
+    await saveCFG();
+    toast(`✅ ${toImport.length} estaciones ${mode==='replace'?'reemplazadas':'agregadas'} en Radio`);
+    renderList('radio');
+    _radioM3UParsed = [];
+    document.getElementById('radio-m3u-preview-card').style.display = 'none';
+    document.getElementById('radio-import-result').className = 'import-result';
+  } catch (e) { toast('❌ ' + e.message); }
+}
+
+/* ══════════════════════════════════════════
+   USERS
+   ══════════════════════════════════════════ */
+let _users = [];
+
+async function loadUsers() {
+  try {
+    const r = await fetch(`${API}/admin/users`, { headers: { 'X-Admin-Token': TOKEN } });
+    _users  = await r.json();
+    renderUsers();
+  } catch (e) { toast('❌ Error cargando usuarios: ' + e.message); }
+}
+
+function renderUsers() {
+  const pending = _users.filter(u => u.status === 'pending');
+  const active  = _users.filter(u => u.status === 'active');
+  const blocked = _users.filter(u => u.status === 'blocked');
+
+  document.getElementById('u-stat-pending').textContent = pending.length;
+  document.getElementById('u-stat-active').textContent  = active.length;
+  document.getElementById('u-stat-blocked').textContent = blocked.length;
+  document.getElementById('stat-users').textContent     = _users.length;
+
+  renderUserList('users-pending-list', pending, ['approve','delete']);
+  renderUserList('users-active-list',  active,  ['block','reset-pin','delete']);
+  renderUserList('users-blocked-list', blocked, ['approve','delete']);
+}
+
+function renderUserList(containerId, users, actions) {
+  const el = document.getElementById(containerId);
+  if (!users.length) {
+    el.innerHTML = '<div style="color:var(--muted);font-size:0.8rem;padding:8px 0;">Sin usuarios en esta categoría</div>';
+    return;
+  }
+  el.innerHTML = users.map(u => `
+    <div class="item-row" style="grid-template-columns:40px 1fr 120px 140px;margin-bottom:8px;">
+      <div style="font-size:1.4rem;text-align:center;">${esc(u.emoji)}</div>
+      <div>
+        <div style="font-weight:600;font-size:0.88rem;">${esc(u.username)}</div>
+        <div style="font-size:0.72rem;color:var(--muted);">Registrado: ${new Date(u.createdAt).toLocaleDateString('es-CR')}</div>
+      </div>
+      <div style="font-size:0.72rem;color:var(--muted);">
+        <div>🎨 ${esc(u.prefs?.wallpaper || 'default')}</div>
+        <div>🕐 ${esc(u.prefs?.timeFormat || '24h')}</div>
+      </div>
+      <div style="display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end;">
+        ${actions.includes('approve')   ? `<button class="btn btn-success btn-sm" onclick="userAction('${u.id}','approve')">✅ Aprobar</button>` : ''}
+        ${actions.includes('block')     ? `<button class="btn btn-danger btn-sm"  onclick="userAction('${u.id}','block')">🚫 Bloquear</button>` : ''}
+        ${actions.includes('reset-pin') ? `<button class="btn btn-secondary btn-sm" onclick="userAction('${u.id}','reset-pin')">🔑 Reset PIN</button>` : ''}
+        ${actions.includes('delete')    ? `<button class="btn btn-danger btn-sm"  onclick="userAction('${u.id}','delete')">🗑️</button>` : ''}
+      </div>
+    </div>`).join('');
+}
+
+async function userAction(id, action) {
+  const labels = { approve:'aprobar', block:'bloquear', delete:'eliminar', 'reset-pin':'resetear PIN' };
+  if (action === 'delete' && !confirm('¿Eliminar este usuario?')) return;
+
+  try {
+    let r;
+    if (action === 'delete') {
+      r = await fetch(`${API}/admin/users/${id}`, { method:'DELETE', headers:{ 'X-Admin-Token': TOKEN } });
+    } else {
+      r = await fetch(`${API}/admin/users/${id}/${action}`, { method:'POST', headers:{ 'X-Admin-Token': TOKEN } });
+    }
+    const data = await r.json();
+    if (data.ok) {
+      if (action === 'reset-pin') {
+        alert(`PIN temporal: ${data.tempPin}\nComunícalo al usuario — deberá cambiarlo.`);
+      } else {
+        toast(`✅ Usuario ${labels[action] || action}`);
+      }
+      loadUsers();
+    } else {
+      toast('❌ ' + (data.error || 'Error'));
+    }
+  } catch (e) { toast('❌ ' + e.message); }
 }
 
 /* ══════════════════════════════════════════

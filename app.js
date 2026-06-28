@@ -105,6 +105,13 @@ function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
 /* ══════════════════════════════════════════════════════════════
    INIT UI
    ══════════════════════════════════════════════════════════════ */
+// Llamado desde index.html después del login + boot para mostrar el banner PWA
+function triggerPWABanner() {
+  if (typeof showPWABanner === 'function') {
+    setTimeout(showPWABanner, 4000);
+  }
+}
+
 function initUI() {
   applySettings(false);
   renderAppGrid();
@@ -461,17 +468,29 @@ function closeDetailModal() {
   state._detailItem = null;
   state._detailType = null;
 }
-function handleSettingsKey(key) { if (key === 'Backspace' || key === 'Escape') { playSnd('nav'); navigateTo('home'); } }
+function handleSettingsKey(key) {
+  if (key === 'Backspace' || key === 'Escape') { playSnd('nav'); navigateTo('home', 'Inicio'); return; }
+  if (typeof state.settingsNavHandler === 'function') state.settingsNavHandler(key);
+}
 function handleAppKey(key) {
-  if (key === 'Backspace' || key === 'Escape') { playSnd('nav'); stopAll(); navigateTo('home'); return; }
-  if (typeof state.appNavHandler === 'function') state.appNavHandler(key);
+  // Si hay un appNavHandler activo, dejarle manejar Backspace/Escape primero
+  // (por ejemplo, Live TV puede querer subir al botón Atrás antes de cerrar)
+  if (typeof state.appNavHandler === 'function') {
+    const handled = state.appNavHandler(key);
+    if (handled) return;
+  }
+  if (key === 'Backspace' || key === 'Escape') { playSnd('nav'); stopAll(); navigateTo('home', 'Inicio'); return; }
 }
 
-/* Foco visual de control remoto — outline no destructivo, no pisa estilos inline existentes */
+/* Foco visual de control remoto — clase .remote-focus (ver styles.css), no pisa estilos inline existentes */
 function setRemoteFocus(el, on) {
   if (!el) return;
-  el.style.outline = on ? '2px solid var(--accent-secondary)' : 'none';
-  el.style.outlineOffset = on ? '-2px' : '0';
+  el.classList.toggle('remote-focus', on);
+}
+/* Sube/baja el foco al botón Atrás del header. Compartido por Live TV, Películas
+   y Radio para cuando ArrowUp llega a la fila más alta de su pantalla. */
+function focusAppBack(on) {
+  setRemoteFocus(document.getElementById('app-back'), on);
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -493,6 +512,7 @@ function navigateTo(screenId, title, renderFn) {
 
   state.currentScreen = screenId;
   state.appNavHandler = null;
+  state.settingsNavHandler = null;
   const tb = document.getElementById('topbar-title');
   if (tb) tb.textContent = title || 'Inicio';
   if (renderFn) renderFn();
@@ -571,7 +591,11 @@ const PLAYER_BTN_STYLE = 'background:rgba(255,255,255,0.12);border:none;color:#f
 function stopHLS() {
   if (state.hlsInstance) { state.hlsInstance.destroy(); state.hlsInstance = null; }
   const v = document.getElementById('hls-video');
-  if (v) { v.pause(); v.src = ''; }
+  if (v) {
+    v.pause();
+    v.removeAttribute('src');
+    v.load(); // cancela la conexión HTTP activa (incluyendo streams de transcodificación)
+  }
 }
 
 function enterPlayerFullscreen(el) {
@@ -597,14 +621,27 @@ function closePlayer() {
   stopHLS();
   exitPlayerFullscreen();
   const overlay = document.getElementById('player-overlay');
-  if (overlay) overlay.remove();
+  if (overlay) {
+    if (overlay._keyHandler) document.removeEventListener('keydown', overlay._keyHandler);
+    overlay.remove();
+  }
   document.addEventListener('keydown', handleKey);
 }
 
-// Si el usuario sale de fullscreen por fuera de nuestros controles (Esc del
-// navegador, gesto del control remoto del TV), cerramos el player prolijamente.
+// Si el usuario sale de fullscreen (Esc del navegador, gesto remoto TV),
+// solo minimizamos la UI — NO cerramos el player ni detenemos el stream.
+// El usuario puede seguir escuchando/viendo y volver a fullscreen con el botón.
 document.addEventListener('fullscreenchange', () => {
-  if (!document.fullscreenElement && document.getElementById('player-overlay')) closePlayer();
+  if (!document.fullscreenElement) {
+    const overlay = document.getElementById('player-overlay');
+    if (overlay) overlay.classList.add('player-chrome-visible');
+  }
+});
+document.addEventListener('webkitfullscreenchange', () => {
+  if (!document.webkitFullscreenElement) {
+    const overlay = document.getElementById('player-overlay');
+    if (overlay) overlay.classList.add('player-chrome-visible');
+  }
 });
 
 function formatPlayerTime(s) {
@@ -721,17 +758,39 @@ function playStream(url, title) {
       muteBtn.textContent = videoEl.muted ? '🔇' : '🔊';
     };
 
+    let _seeking = false;
+    seekSlider.addEventListener('mousedown', () => { _seeking = true; });
+    seekSlider.addEventListener('touchstart', () => { _seeking = true; }, { passive: true });
     seekSlider.addEventListener('input', () => {
+      if (isFinite(videoEl.duration) && videoEl.duration > 0) {
+        const t = (seekSlider.value / 100) * videoEl.duration;
+        document.getElementById('player-time-current').textContent = formatPlayerTime(t);
+      }
+    });
+    seekSlider.addEventListener('change', () => {
+      // Solo hacer seek al soltar — no en cada tick del slider
       if (isFinite(videoEl.duration) && videoEl.duration > 0) {
         videoEl.currentTime = (seekSlider.value / 100) * videoEl.duration;
       }
+      _seeking = false;
     });
+
+    // timeupdate: actualizar UI solo si los controles son visibles Y no está seeking
+    // Usar requestAnimationFrame para sincronizar con el ciclo de repintado
+    let _rafPending = false;
     videoEl.addEventListener('timeupdate', () => {
-      if (isFinite(videoEl.duration) && videoEl.duration > 0) {
-        seekSlider.value = (videoEl.currentTime / videoEl.duration) * 100;
-        document.getElementById('player-time-current').textContent = formatPlayerTime(videoEl.currentTime);
-      }
+      if (_seeking || !overlay.classList.contains('player-chrome-visible')) return;
+      if (_rafPending) return;
+      _rafPending = true;
+      requestAnimationFrame(() => {
+        _rafPending = false;
+        if (isFinite(videoEl.duration) && videoEl.duration > 0 && !_seeking) {
+          seekSlider.value = (videoEl.currentTime / videoEl.duration) * 100;
+          document.getElementById('player-time-current').textContent = formatPlayerTime(videoEl.currentTime);
+        }
+      });
     });
+
     videoEl.addEventListener('loadedmetadata', () => {
       const isVOD = isFinite(videoEl.duration) && videoEl.duration > 0;
       seekRow.style.display = isVOD ? 'flex' : 'none';
@@ -743,24 +802,30 @@ function playStream(url, title) {
       else enterPlayerFullscreen(overlay);
     };
 
-    // Auto-hide de topbar y controles inferiores con inactividad
+    // Auto-hide — solo reaccionar cuando el chrome está oculto para mostrar,
+    // o cuando está visible para reiniciar el timer. Nunca en cada píxel.
     let hideTimer;
+    let _lastMove = 0;
     function showChrome() {
-      document.getElementById('player-topbar').style.opacity   = '1';
-      document.getElementById('player-controls').style.opacity = '1';
+      const now = Date.now();
+      if (now - _lastMove < 300) return; // throttle real basado en tiempo
+      _lastMove = now;
+      overlay.classList.add('player-chrome-visible');
       clearTimeout(hideTimer);
       hideTimer = setTimeout(() => {
-        document.getElementById('player-topbar').style.opacity   = '0';
-        document.getElementById('player-controls').style.opacity = '0';
+        overlay.classList.remove('player-chrome-visible');
       }, 3500);
     }
-    overlay.addEventListener('mousemove', showChrome);
-    overlay.addEventListener('click', showChrome);
+    overlay.addEventListener('pointermove', showChrome, { passive: true });
+    overlay.addEventListener('click', showChrome, { passive: true });
     showChrome();
 
-    // Keyboard inside player
+    // Keyboard inside player — el overlay necesita foco para recibir eventos
+    overlay.setAttribute('tabindex', '-1');
+    overlay.focus();
     document.removeEventListener('keydown', handleKey);
-    overlay.addEventListener('keydown', e => {
+    // Usar document para capturar teclas en TV (el overlay puede perder foco)
+    function playerKeyHandler(e) {
       showChrome();
       if (e.key === 'Escape' || e.key === 'Backspace') { e.preventDefault(); closePlayer(); return; }
       if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); togglePlayPause(); }
@@ -780,7 +845,10 @@ function playStream(url, title) {
         volumeSlider.value = videoEl.volume;
         muteBtn.textContent = videoEl.muted ? '🔇' : '🔊';
       }
-    });
+    }
+    document.addEventListener('keydown', playerKeyHandler);
+    // Guardar referencia para poder removerlo al cerrar
+    overlay._keyHandler = playerKeyHandler;
   }
 
   document.getElementById('player-title').textContent  = title || '';
@@ -812,9 +880,52 @@ function playStream(url, title) {
   const isM3U8 = /\.m3u8(\?|#|$)/i.test(url);
 
   if (!isM3U8) {
-    const proxied = `${API}/proxy-stream?url=${encodeURIComponent(url)}`;
+    const proxied    = `${API}/proxy-stream?url=${encodeURIComponent(url)}`;
+    const transcoded = `${API}/transcode?url=${encodeURIComponent(url)}`;
+
+    function tryDirect() {
+      // Intento 2: directo desde el navegador (IP del usuario)
+      const status = document.getElementById('player-status');
+      if (status) status.textContent = '↩️ Reintentando…';
+      video.src = url;
+      video.load();
+      video.play().catch(() => {});
+      checkCodecAfterLoad();
+    }
+
+    function tryTranscode() {
+      // Intento 3: transcodificación en tiempo real (último recurso)
+      const status = document.getElementById('player-status');
+      if (status) status.textContent = '⚙️ Transcodificando…';
+      showToast('⚙️ Codec incompatible — transcodificando, espera unos segundos…');
+      video.src = transcoded;
+      video.load();
+      video.play().catch(() => {});
+    }
+
+    function checkCodecAfterLoad() {
+      video.addEventListener('loadedmetadata', function onMeta() {
+        if (video.videoWidth === 0 && video.videoHeight === 0) {
+          console.warn('[MythOS] Sin pista de video — activando transcodificación');
+          tryTranscode();
+        }
+      }, { once: true });
+    }
+
+    // Intento 1: proxy normal
     video.src = proxied;
     video.play().catch(() => showToast('⚠️ El navegador bloqueó el autoplay'));
+    checkCodecAfterLoad();
+
+    // Si el proxy da 403/502 → ir directo
+    video.addEventListener('error', function onErr() {
+      fetch(proxied, { method: 'HEAD' })
+        .then(r => {
+          if (r.status === 403 || r.status === 502 || r.status === 504) tryDirect();
+        })
+        .catch(() => tryDirect());
+    }, { once: true });
+
     return;
   }
 
@@ -981,28 +1092,56 @@ function openLiveTV() {
       els[tvChanIdx]?.scrollIntoView({ block: 'nearest' });
     }
     state.appNavHandler = (key) => {
+      // Escape/Backspace: foco al botón Atrás y volver al home
+      if (key === 'Escape' || key === 'Backspace') {
+        playSnd('nav');
+        stopAll();
+        navigateTo('home', 'Inicio');
+        return true; // indica que lo manejamos
+      }
+
+      // CH+ / CH- durante reproducción (canales: PageUp/PageDown o MediaTrackNext)
+      if (key === 'ChannelUp' || key === 'PageUp') {
+        const chans = getChanEls();
+        if (chans.length) { focusChan(tvChanIdx - 1); getChanEls()[tvChanIdx]?.click(); }
+        return true;
+      }
+      if (key === 'ChannelDown' || key === 'PageDown') {
+        const chans = getChanEls();
+        if (chans.length) { focusChan(tvChanIdx + 1); getChanEls()[tvChanIdx]?.click(); }
+        return true;
+      }
+
       if (key === 'Enter') {
         playSnd('enter');
-        if (tvPane === 'cats') {
+        if (tvPane === 'back') {
+          back.click();
+        } else if (tvPane === 'cats') {
           getCatEls()[tvCatIdx]?.click();
           tvChanIdx = 0;
           focusChan(0);
         } else {
           getChanEls()[tvChanIdx]?.click();
         }
-        return;
+        return true;
       }
-      if (!['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(key)) return;
+      if (!['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(key)) return false;
       playSnd('nav');
-      if (tvPane === 'cats') {
-        if (key === 'ArrowUp')    focusCat(tvCatIdx - 1);
+      if (tvPane === 'back') {
+        if (key === 'ArrowDown') { tvPane = 'cats'; focusAppBack(false); focusCat(tvCatIdx); }
+      } else if (tvPane === 'cats') {
+        if (key === 'ArrowUp') {
+          if (tvCatIdx > 0) focusCat(tvCatIdx - 1);
+          else { tvPane = 'back'; focusCat(tvCatIdx); focusAppBack(true); }
+        }
         if (key === 'ArrowDown')  focusCat(tvCatIdx + 1);
         if (key === 'ArrowRight') { tvPane = 'list'; focusChan(tvChanIdx); focusCat(tvCatIdx); }
       } else {
-        if (key === 'ArrowUp')   focusChan(tvChanIdx - 1);
+        if (key === 'ArrowUp')   { tvChanIdx > 0 ? focusChan(tvChanIdx - 1) : (()=>{ tvPane='cats'; focusCat(tvCatIdx); })(); }
         if (key === 'ArrowDown') focusChan(tvChanIdx + 1);
         if (key === 'ArrowLeft') { tvPane = 'cats'; focusCat(tvCatIdx); focusChan(tvChanIdx); }
       }
+      return true;
     };
     focusChan(0);
   });
@@ -1088,17 +1227,30 @@ function openMovies() {
       cards.forEach((c, j) => setRemoteFocus(c, j === _movIdx));
       cards[_movIdx].scrollIntoView({ block: 'nearest' });
     }
+    let atBack = false;
     state.appNavHandler = (key) => {
       const cards = getMovieCards();
       if (!cards.length) return;
-      if (key === 'Enter') { playSnd('enter'); cards[_movIdx]?.click(); return; }
-      if (!['ArrowRight','ArrowLeft','ArrowDown','ArrowUp'].includes(key)) return;
+      if (key === 'Enter') {
+        playSnd('enter');
+        if (atBack) back.click(); else cards[_movIdx]?.click();
+        return true;
+      }
+      if (!['ArrowRight','ArrowLeft','ArrowDown','ArrowUp'].includes(key)) return false;
       playSnd('nav');
       const cols = getMovieCols();
+      if (atBack) {
+        if (key === 'ArrowDown') { atBack = false; focusAppBack(false); focusMovie(_movIdx); }
+        return true;
+      }
       if (key === 'ArrowRight') focusMovie(_movIdx + 1);
       if (key === 'ArrowLeft')  focusMovie(_movIdx - 1);
       if (key === 'ArrowDown')  focusMovie(_movIdx + cols);
-      if (key === 'ArrowUp')    focusMovie(_movIdx - cols);
+      if (key === 'ArrowUp') {
+        if (_movIdx - cols >= 0) focusMovie(_movIdx - cols);
+        else { atBack = true; cards.forEach(c => setRemoteFocus(c, false)); focusAppBack(true); }
+      }
+      return true;
     };
     focusMovie(0);
   });
@@ -1185,23 +1337,31 @@ function openRadio() {
     state.appNavHandler = (key) => {
       if (key === 'Enter') {
         playSnd('enter');
-        if (radioZone === 'controls') getControlEls()[radioCtrlIdx]?.click();
+        if (radioZone === 'back') back.click();
+        else if (radioZone === 'controls') getControlEls()[radioCtrlIdx]?.click();
         else getStationEls()[radioStatIdx]?.click();
-        return;
+        return true;
       }
-      if (!['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(key)) return;
+      if (!['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(key)) return false;
       playSnd('nav');
-      if (radioZone === 'stations') {
-        if (key === 'ArrowUp')   focusStationItem(radioStatIdx - 1);
+      if (radioZone === 'back') {
+        if (key === 'ArrowDown') { radioZone = 'stations'; focusAppBack(false); focusStationItem(radioStatIdx); focusControlItem(radioCtrlIdx); }
+      } else if (radioZone === 'stations') {
+        if (key === 'ArrowUp') {
+          if (radioStatIdx > 0) focusStationItem(radioStatIdx - 1);
+          else { radioZone = 'back'; focusStationItem(radioStatIdx); focusAppBack(true); }
+        }
         if (key === 'ArrowDown') focusStationItem(radioStatIdx + 1);
         if (key === 'ArrowLeft') { radioZone = 'controls'; focusControlItem(radioCtrlIdx); focusStationItem(radioStatIdx); }
       } else {
+        if (key === 'ArrowUp') { radioZone = 'back'; focusControlItem(radioCtrlIdx); focusAppBack(true); }
         if (key === 'ArrowLeft')  focusControlItem(radioCtrlIdx - 1);
         if (key === 'ArrowRight') {
           if (radioCtrlIdx === 2) { radioZone = 'stations'; focusStationItem(radioStatIdx); focusControlItem(radioCtrlIdx); }
           else focusControlItem(radioCtrlIdx + 1);
         }
       }
+      return true;
     };
     focusStationItem(radioStatIdx);
     focusControlItem(radioCtrlIdx);
@@ -1231,16 +1391,27 @@ function startRadioStream(url) {
   state.radioPlaying = true;
   document.getElementById('radio-play').textContent = '⏸';
   document.getElementById('radio-disc').classList.add('playing');
-  if (url) {
-    if (!state.radioAudio) state.radioAudio = new Audio();
+  if (!url) { showToast('ℹ️ URL de stream no configurada'); return; }
+
+  // Siempre pasar por proxy: resuelve mixed-content (HTTP en HTTPS) y CORS
+  const proxied = url.startsWith('/api/') ? url : `${API}/proxy-stream?url=${encodeURIComponent(url)}`;
+
+  if (!state.radioAudio) state.radioAudio = new Audio();
+  state.radioAudio.src = proxied;
+  state.radioAudio.load();
+
+  // Intentar con proxy primero; si falla, reintentar con URL directa
+  state.radioAudio.play().catch(() => {
+    // Fallback: URL directa (puede funcionar si el stream es HTTPS y tiene CORS abierto)
     state.radioAudio.src = url;
+    state.radioAudio.load();
     state.radioAudio.play().catch(() => {
       showToast('⚠️ No se pudo cargar el stream');
       state.radioPlaying = false;
       document.getElementById('radio-play').textContent = '▶';
       document.getElementById('radio-disc').classList.remove('playing');
     });
-  } else { showToast('ℹ️ URL de stream no configurada'); }
+  });
 }
 
 function stopRadio() {
@@ -1265,8 +1436,79 @@ function openSettings() {
   navigateTo('settings', 'Configuración', () => {
     syncSettingsUI();
     initSettingsListeners();
+    initSettingsNav();
   });
 }
+
+function initSettingsNav() {
+  // Construir lista de elementos focusables DESPUÉS de que renderSettingsAppList los haya creado
+  function getFocusables() {
+    return [
+      document.getElementById('setting-system-name'),
+      document.getElementById('setting-wallpaper'),
+      document.getElementById('setting-glass'),
+      document.getElementById('setting-sound'),
+      ...document.querySelectorAll('.settings-url-input'),
+      document.getElementById('settings-save'),
+    ].filter(Boolean);
+  }
+
+  let idx = 0;
+
+  function applyFocus(i) {
+    const items = getFocusables();
+    if (!items.length) return;
+    idx = Math.max(0, Math.min(i, items.length - 1));
+    items.forEach((el, j) => {
+      const on = j === idx;
+      el.setAttribute('tabindex', on ? '0' : '-1');
+      setRemoteFocus(el, on);
+    });
+    const target = items[idx];
+    target.focus();
+    // Para checkboxes mostramos el foco pero no activamos con focus()
+    // para evitar que el estado cambie solo al navegar
+  }
+
+  state.settingsNavHandler = (key) => {
+    const items = getFocusables();
+    if (!items.length) return;
+
+    if (key === 'ArrowDown') { playSnd('nav'); applyFocus(idx + 1); return; }
+    if (key === 'ArrowUp')   { playSnd('nav'); applyFocus(idx - 1); return; }
+
+    if (key === 'Enter') {
+      const el = items[idx];
+      if (!el) return;
+      playSnd('enter');
+      if (el.type === 'checkbox') {
+        el.checked = !el.checked;
+        el.dispatchEvent(new Event('change'));
+      } else if (el.tagName === 'BUTTON') {
+        el.click();
+      } else {
+        // inputs y select — darles foco nativo para que el teclado físico funcione
+        el.focus();
+      }
+      return;
+    }
+
+    // ←→ en select: cambiar opción
+    if (key === 'ArrowRight' || key === 'ArrowLeft') {
+      const el = items[idx];
+      if (el && el.tagName === 'SELECT') {
+        playSnd('nav');
+        const dir = key === 'ArrowRight' ? 1 : -1;
+        el.selectedIndex = Math.max(0, Math.min(el.selectedIndex + dir, el.options.length - 1));
+        el.dispatchEvent(new Event('change'));
+      }
+    }
+  };
+
+  // Foco inicial en el primer elemento
+  applyFocus(0);
+}
+
 
 function syncSettingsUI() {
   document.getElementById('setting-system-name').value = state.systemName;
@@ -1663,4 +1905,6 @@ document.addEventListener('DOMContentLoaded', () => {
 /* ══════════════════════════════════════════════════════════════
    KICK OFF
    ══════════════════════════════════════════════════════════════ */
-boot();
+// boot() se llama desde index.html una vez el usuario está autenticado
+// Si no hay pantalla de usuario (acceso directo), arranca igual
+if (!document.getElementById("user-screen")) boot();
