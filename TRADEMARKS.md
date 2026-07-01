@@ -1,6 +1,6 @@
 # MythOS TV Trademarks
 
-"MythOS TV", its logos, icons, visual identity, and branding are the intellectual property of Mike Sosa.
+"MythOS TV", its logos, icons, visual identity, and branding are the intellectual property of Maikel Solano Salas.
 
 You may not:
 
