@@ -1,6 +1,6 @@
 # 📺 MythOS TV
 
-> © 2026 Mike Sosa. Source Available software. Commercial use, redistribution, hosting, and derivative distribution require prior written permission from the author.
+> © 2026 Maikel Solano Salas. Source Available software. Commercial use, redistribution, hosting, and derivative distribution require prior written permission from the author.
 
 **Personal TV Operating System PWA**
 🎬 Cinematic UI · 📺 Remote Navigation · ⚡ Offline-ready · 🌐 Cross-platform
@@ -355,7 +355,7 @@ Características principales implementadas:
 
 MythOS TV es un proyecto **Source Available**.
 
-Copyright © 2026 Mike Sosa. Todos los derechos reservados.
+Copyright © 2026 Maikel Solano Salas. Todos los derechos reservados.
 
 El código fuente se proporciona únicamente para:
 
@@ -379,7 +379,7 @@ Consulte los archivos `LICENSE` y `TRADEMARKS.md` para conocer los términos com
 
 ## ™ Marca y atribución
 
-**MythOS TV**, sus logotipos, iconos e identidad visual son propiedad intelectual de Mike Sosa.
+**MythOS TV**, sus logotipos, iconos e identidad visual son propiedad intelectual de Maikel Solano Salas.
 
 El uso del nombre, la identidad visual o la marca para productos derivados o redistribuciones no autorizadas está prohibido.
 
@@ -387,5 +387,5 @@ El uso del nombre, la identidad visual o la marca para productos derivados o red
 
 ## 👨‍💻 Autor
 
-**Mike Sosa**
+**Maikel Solano Salas**
 Creador, diseñador y desarrollador principal de MythOS TV.
