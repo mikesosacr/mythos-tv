@@ -1,25 +1,73 @@
 # 📺 MythOS TV
 
+> © 2026 Mike Sosa. Source Available software. Commercial use, redistribution, hosting, and derivative distribution require prior written permission from the author.
+
 **Personal TV Operating System PWA**
 🎬 Cinematic UI · 📺 Remote Navigation · ⚡ Offline-ready · 🌐 Cross-platform
 
-MythOS TV es un sistema operativo de TV personal desarrollado como una Progressive Web App (PWA), inspirado en las interfaces de WebOS y HarmonyOS. Está diseñado para ofrecer una experiencia multimedia moderna, optimizada para televisores, controles remotos y dispositivos de bajo consumo.
+MythOS TV es un sistema operativo multimedia tipo Smart TV desarrollado como una Progressive Web App (PWA), inspirado en WebOS, HarmonyOS y las interfaces modernas de Netflix. Está diseñado para ofrecer una experiencia cinematográfica optimizada para televisores, TV Box, navegadores y dispositivos móviles.
 
 ---
 
 ## ✨ Características
 
-* 🎬 Interfaz cinematográfica estilo Smart TV.
-* 📺 Navegación optimizada para control remoto y teclado.
+* 🎬 Interfaz cinematográfica estilo Smart TV y Netflix.
+* 📺 Navegación optimizada para control remoto, teclado, mouse y touch.
 * ⚡ Instalación como Progressive Web App (PWA).
 * 🌐 Funcionamiento offline mediante Service Worker.
 * ❤️ Sistema de favoritos.
 * 🔍 Búsqueda integrada.
-* 📡 Soporte para IPTV y contenido multimedia.
+* 👥 Sistema multiusuario con autenticación y PIN.
+* ▶️ Sistema **Continuar viendo** con reanudación automática.
+* 📊 Progreso de reproducción sincronizado por usuario.
+* 🎞️ Agrupación automática de películas mediante TMDB.
+* 🌐 Proxy automático para streams HLS/M3U8 con problemas de CORS.
+* 📥 Exportador de listas M3U.
+* 🎨 Sistema de temas dinámicos.
+* 📡 Soporte para IPTV, películas, radio y contenido multimedia.
 * 🖥️ Panel de administración integrado.
-* 👥 Gestión de usuarios y autenticación.
-* 📱 Compatible con Smart TV, Android TV, navegadores y dispositivos móviles.
+* 📱 Compatible con Smart TV, Android TV, TV Box, navegadores y dispositivos móviles.
 * 🚀 Desarrollado en Vanilla JavaScript y Node.js.
+
+---
+
+## 🎬 Funcionalidades multimedia
+
+### Películas
+
+* Modal de detalle estilo Netflix.
+* Fila **Mejor valoradas**.
+* Fila **Continuar viendo**.
+* Reanudación automática de reproducción.
+* Múltiples servidores por película.
+* Agrupación automática por géneros TMDB.
+
+### 📺 Live TV
+
+* Reproducción HLS.
+* Proxy automático para streams incompatibles con CORS.
+* Soporte de logos y categorías.
+* Navegación optimizada para TV.
+
+### 📻 Radio
+
+* Soporte para streams online.
+* Integración con listas personalizadas.
+* Navegación mediante control remoto.
+
+---
+
+## 🛠️ Tecnologías
+
+* Vanilla JavaScript
+* HTML5
+* CSS3
+* Node.js
+* Express
+* HLS.js
+* Service Workers
+* Progressive Web App (PWA)
+* Nginx
 
 ---
 
@@ -29,30 +77,33 @@ MythOS TV es un sistema operativo de TV personal desarrollado como una Progressi
 mythos-tv/
 ├── .gitignore
 ├── README.md
-├── index.html              ← Shell principal del sistema
-├── admin.html              ← Panel de administración
-├── app.js                  ← Runtime y lógica principal
-├── app1.js                 ← Funcionalidades experimentales
-├── styles.css              ← Interfaz y estilos
-├── server.js               ← Backend Node.js
-├── manifest.json           ← Configuración PWA
-├── service-worker.js       ← Cache y soporte offline
-├── package.json            ← Dependencias y scripts
+├── LICENSE
+├── TRADEMARKS.md
+├── index.html
+├── admin.html
+├── app.js
+├── app1.js
+├── styles.css
+├── server.js
+├── manifest.json
+├── service-worker.js
+├── package.json
 ├── package-lock.json
-├── nginx.conf              ← Configuración de Nginx
-├── mytv.service            ← Servicio systemd
-├── deploy.sh               ← Instalación automática
-├── setup-backend.sh        ← Configuración del backend
-├── apps/                   ← Módulos y aplicaciones
+├── nginx.conf
+├── mytv.service
+├── deploy.sh
+├── setup-backend.sh
+├── apps/
 ├── assets/
 │   └── icons/
 │       ├── icon.svg
 │       ├── icon-192.png
 │       └── icon-512.png
 └── data/
-    ├── auth.json           ← Configuración de autenticación
-    ├── config.json         ← Configuración del sistema
-    └── users.json          ← Gestión de usuarios
+    ├── auth.json
+    ├── config.json
+    ├── users.json
+    └── progress.json
 ```
 
 > **Nota:** algunas instalaciones antiguas pueden seguir utilizando el directorio `~/mytvos` por compatibilidad. El nombre oficial del proyecto es **MythOS TV**.
@@ -113,30 +164,6 @@ nginx -v
 
 ---
 
-## 📂 Despliegue
-
-### Copiar el proyecto
-
-```bash
-sudo mkdir -p /var/www/mytv
-sudo cp -r . /var/www/mytv/
-```
-
-### Instalar dependencias
-
-```bash
-cd /var/www/mytv
-npm install
-```
-
-### Iniciar el backend
-
-```bash
-node server.js
-```
-
----
-
 ## ⚙️ Servicio systemd
 
 Instalar:
@@ -174,13 +201,43 @@ sudo apt install certbot python3-certbot-nginx -y
 sudo certbot --nginx
 ```
 
-HTTPS es recomendado para la instalación de la PWA y para el correcto funcionamiento de los Service Workers en algunos dispositivos.
+HTTPS es recomendado para la instalación de la PWA y para el correcto funcionamiento de los Service Workers.
+
+---
+
+## 🔌 API
+
+### Configuración
+
+```text
+GET  /api/config
+POST /api/config
+```
+
+### Usuarios
+
+```text
+GET  /api/users
+POST /api/users
+```
+
+### Progreso de reproducción
+
+```text
+GET  /api/progress/:username
+POST /api/progress
+```
+
+### Streaming
+
+```text
+GET /api/proxy-stream
+GET /api/proxy-m3u8
+```
 
 ---
 
 ## 🖥️ Administración
-
-MythOS TV incluye un panel de administración integrado.
 
 Archivos relacionados:
 
@@ -188,22 +245,7 @@ Archivos relacionados:
 * `data/config.json`
 * `data/users.json`
 * `data/auth.json`
-
----
-
-## 📡 Servicios multimedia
-
-### IPTV
-
-Permite integrar listas y servicios de streaming compatibles.
-
-### Radio
-
-Admite estaciones de radio online y streams personalizados.
-
-### Servicios externos
-
-Permite integrar aplicaciones y servicios multimedia mediante enlaces y configuraciones personalizadas.
+* `data/progress.json`
 
 ---
 
@@ -264,16 +306,86 @@ npm install
 
 ---
 
-## 🗺️ Roadmap
+## 📸 Capturas
 
-* [ ] Sistema de plugins.
-* [ ] Multiusuario.
-* [ ] Sincronización en la nube.
-* [ ] Integración con más servicios multimedia.
-* [ ] Mejoras para WebOS, Tizen y otras plataformas Smart TV.
+Próximamente:
+
+* Home
+* Tema Netflix
+* Continuar viendo
+* Live TV
+* Panel administrativo
 
 ---
 
-## 📄 Licencia
+## 🗺️ Roadmap
 
-MIT — Úsalo, modifícalo y despliégalo libremente.
+* [x] Sistema multiusuario con PIN
+* [x] Tema Netflix
+* [x] Continuar viendo
+* [x] Proxy M3U8
+* [x] Exportador M3U
+* [ ] Sistema de plugins
+* [ ] Series
+* [ ] Filas Netflix para Live TV
+* [ ] Filas Netflix para Radio
+* [ ] Editor de apariencia
+* [ ] Scraper Archive.org
+* [ ] Backups automáticos
+
+---
+
+## 📊 Estado del proyecto
+
+**Versión actual:** 0.9 Beta
+
+Características principales implementadas:
+
+* ✅ PWA
+* ✅ Multiusuario
+* ✅ Continuar viendo
+* ✅ Tema Netflix
+* ✅ Proxy M3U8
+* ✅ Administración integrada
+* ✅ Exportador M3U
+
+---
+
+## 🛡️ Licencia
+
+MythOS TV es un proyecto **Source Available**.
+
+Copyright © 2026 Mike Sosa. Todos los derechos reservados.
+
+El código fuente se proporciona únicamente para:
+
+* Aprendizaje.
+* Evaluación.
+* Uso personal y no comercial.
+
+No está permitido:
+
+* Redistribuir el software o versiones modificadas.
+* Comercializar el software.
+* Crear servicios comerciales basados en el proyecto.
+* Eliminar los avisos de copyright.
+* Reemplazar la autoría original.
+* Reutilizar el nombre, logotipos o identidad de MythOS TV sin autorización.
+* Distribuir trabajos derivados sin permiso expreso del autor.
+
+Consulte los archivos `LICENSE` y `TRADEMARKS.md` para conocer los términos completos de uso y atribución.
+
+---
+
+## ™ Marca y atribución
+
+**MythOS TV**, sus logotipos, iconos e identidad visual son propiedad intelectual de Mike Sosa.
+
+El uso del nombre, la identidad visual o la marca para productos derivados o redistribuciones no autorizadas está prohibido.
+
+---
+
+## 👨‍💻 Autor
+
+**Mike Sosa**
+Creador, diseñador y desarrollador principal de MythOS TV.
