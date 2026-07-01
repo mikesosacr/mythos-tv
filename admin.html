@@ -155,6 +155,13 @@
     /* ── MISC ──────────────────────────────────── */
     .tag { display:inline-block; padding:2px 8px; border-radius:6px; font-size:0.68rem; font-weight:600; background:rgba(124,106,247,0.15); color:#a89dff; }
     .sys-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+    /* ── SCRAPER BATCH ─────────────────────── */
+    .scraper-log { font-family:monospace; font-size:0.75rem; color:var(--muted); background:rgba(0,0,0,0.3); padding:10px 14px; border-radius:8px; max-height:200px; overflow-y:auto; white-space:pre-wrap; margin-top:10px; display:none; }
+    .scraper-log.show { display:block; }
+    .scraper-log .ok   { color:#22c55e; }
+    .scraper-log .miss { color:#f59e0b; }
+    .scraper-log .err  { color:#ef4444; }
+
     ::-webkit-scrollbar { width:4px; } ::-webkit-scrollbar-track { background:transparent; } ::-webkit-scrollbar-thumb { background:var(--accent); border-radius:2px; }
   </style>
 </head>
@@ -251,6 +258,13 @@
                 <option value="abstract">Abstracto</option>
               </select>
             </div>
+            <div class="form-group"><label>Tema de navegación de contenidos</label>
+              <select id="sys-theme">
+                <option value="default">Clásico (grid actual)</option>
+                <option value="netflix">Netflix (filas horizontales)</option>
+              </select>
+              <div style="font-size:0.72rem;color:var(--muted);margin-top:4px;">El cambio se aplica al instante en todas las TVs conectadas, sin recargar.</div>
+            </div>
           </div>
         </div>
         <div class="card">
@@ -275,7 +289,12 @@
 
       <!-- LIVE TV -->
       <section class="page" id="page-livetv">
-        <div class="page-header"><div><div class="page-title">Live TV</div><div class="page-subtitle">Canales en vivo — m3u8, TS, HLS</div></div><div class="header-actions"><button class="btn btn-secondary" onclick="addRow('livetv')">➕ Canal</button><button class="btn btn-primary" onclick="saveAll('livetv')">💾 Guardar</button></div></div>
+        <div class="page-header"><div><div class="page-title">Live TV</div><div class="page-subtitle">Canales en vivo — m3u8, TS, HLS</div></div><div class="header-actions"><button class="btn btn-secondary" onclick="addRow('livetv')">➕ Canal</button><button class="btn btn-secondary" onclick="autoLogosLiveTV()" id="btn-auto-livetv">🔍 Buscar logos</button><button class="btn btn-primary" onclick="saveAll('livetv')">💾 Guardar</button></div></div>
+        <div class="card" id="livetv-scraper-card" style="display:none;">
+          <div class="card-title"><span class="dot"></span> Resultado del scraper</div>
+          <div class="import-result show info" id="livetv-scraper-status">Iniciando…</div>
+          <div class="scraper-log show" id="livetv-scraper-log"></div>
+        </div>
         <div class="card">
           <div class="card-title"><span class="dot"></span> Canales <span class="tag" id="livetv-count">0</span></div>
           <div style="display:grid;grid-template-columns:48px 1fr 130px 1fr 1fr 36px;gap:8px;padding:0 12px 8px;font-size:0.65rem;font-weight:700;letter-spacing:0.07em;color:var(--muted2);text-transform:uppercase;">
@@ -288,7 +307,17 @@
 
       <!-- MOVIES -->
       <section class="page" id="page-movies">
-        <div class="page-header"><div><div class="page-title">Películas / VOD</div><div class="page-subtitle">Contenido bajo demanda</div></div><div class="header-actions"><button class="btn btn-secondary" onclick="addRow('movies')">➕ Película</button><button class="btn btn-primary" onclick="saveAll('movies')">💾 Guardar</button></div></div>
+        <div class="page-header"><div><div class="page-title">Películas / VOD</div><div class="page-subtitle">Contenido bajo demanda</div></div><div class="header-actions"><button class="btn btn-secondary" onclick="addRow('movies')">➕ Película</button><button class="btn btn-secondary" onclick="autoMetadataMovies()" id="btn-auto-movies">🔍 Auto-metadata</button><button class="btn btn-secondary" onclick="showPendingMovies()">📋 Ver pendientes</button><button class="btn btn-primary" onclick="saveAll('movies')">💾 Guardar</button></div></div>
+        <div class="card" id="movies-scraper-card" style="display:none;">
+          <div class="card-title"><span class="dot"></span> Resultado del scraper</div>
+          <div class="import-result show info" id="movies-scraper-status">Iniciando…</div>
+          <div class="scraper-log show" id="movies-scraper-log"></div>
+        </div>
+        <div class="card" id="movies-failed-card" style="display:none;">
+          <div class="card-title"><span class="dot" style="background:#f43f5e;"></span> Sin resultados — corregir y reintentar <span class="tag" id="movies-failed-count">0</span></div>
+          <div class="page-subtitle" style="margin-bottom:10px;">Editá el título (ej. sacale números o palabras que sobren) y tocá reintentar. Se prueba contra TMDB con varias variantes automáticas también.</div>
+          <div id="movies-failed-list"></div>
+        </div>
         <div class="card">
           <div class="card-title"><span class="dot"></span> Contenido VOD <span class="tag" id="movies-count">0</span></div>
           <div style="display:grid;grid-template-columns:48px 1fr 130px 1fr 1fr 36px;gap:8px;padding:0 12px 8px;font-size:0.65rem;font-weight:700;letter-spacing:0.07em;color:var(--muted2);text-transform:uppercase;">
@@ -305,8 +334,14 @@
           <div><div class="page-title">Radio</div><div class="page-subtitle">Streams de audio</div></div>
           <div class="header-actions">
             <button class="btn btn-secondary" onclick="addRow('radio')">➕ Estación</button>
+            <button class="btn btn-secondary" onclick="autoLogosRadio()" id="btn-auto-radio">🔍 Buscar logos</button>
             <button class="btn btn-primary" onclick="saveAll('radio')">💾 Guardar</button>
           </div>
+        </div>
+        <div class="card" id="radio-scraper-card" style="display:none;">
+          <div class="card-title"><span class="dot"></span> Resultado del scraper</div>
+          <div class="import-result show info" id="radio-scraper-status">Iniciando…</div>
+          <div class="scraper-log show" id="radio-scraper-log"></div>
         </div>
 
         <!-- Importador M3U para Radio -->
@@ -399,6 +434,17 @@
             </div>
           </div>
           <div style="max-height:280px;overflow-y:auto;"><div class="item-list" id="m3u-preview-list"></div></div>
+        </div>
+
+        <div class="card">
+          <div class="card-title"><span class="dot"></span> Exportar lista M3U</div>
+          <p style="font-size:0.8rem;color:var(--muted);margin:0 0 14px;">Descarga el contenido actual de cada categoría como un archivo <code>.m3u</code> listo para importar en otro dispositivo o app.</p>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;">
+            <button class="btn btn-secondary" onclick="exportM3U('livetv')">📺 Exportar Live TV</button>
+            <button class="btn btn-secondary" onclick="exportM3U('movies')">🎬 Exportar Películas</button>
+            <button class="btn btn-secondary" onclick="exportM3U('radio')">📻 Exportar Radio</button>
+          </div>
+          <div class="import-result" id="export-result" style="margin-top:12px;"></div>
         </div>
       </section>
 
@@ -606,6 +652,7 @@ function renderSystem() {
   if (!CFG) return;
   document.getElementById('sys-name').value      = CFG.systemName || 'MythOS TV';
   document.getElementById('sys-wallpaper').value = CFG.wallpaper  || 'default';
+  document.getElementById('sys-theme').value     = CFG.theme     || 'default';
   document.getElementById('sys-glass').checked   = CFG.glassEnabled !== false;
   document.getElementById('sys-sound').checked   = CFG.soundEnabled !== false;
 }
@@ -619,6 +666,7 @@ async function saveAll(section) {
   if (section === 'system') {
     CFG.systemName   = document.getElementById('sys-name').value.trim() || 'MythOS TV';
     CFG.wallpaper    = document.getElementById('sys-wallpaper').value;
+    CFG.theme        = document.getElementById('sys-theme').value;
     CFG.glassEnabled = document.getElementById('sys-glass').checked;
     CFG.soundEnabled = document.getElementById('sys-sound').checked;
   }
@@ -733,9 +781,14 @@ function renderList(type) {
 
 function getListFromDOM(type) {
   const lc = LIST_CFG[type];
-  return Array.from(document.querySelectorAll(`#${type}-list .item-row`)).map(row =>
-    Object.fromEntries(lc.fields.map(f => [f, row.querySelector(`[data-f="${f}"]`).value]))
-  );
+  return Array.from(document.querySelectorAll(`#${type}-list .item-row`)).map((row, i) => {
+    const fromDom = Object.fromEntries(lc.fields.map(f => [f, row.querySelector(`[data-f="${f}"]`).value]));
+    // Preservar campos que no son editables en esta tabla (metadata del scraper:
+    // tmdbConfirmed, tmdbSkip, description, year, genre, duration, rating, etc.)
+    // para que guardar la lista no borre el progreso del scraper.
+    const existing = CFG?.[type]?.[i] || {};
+    return { ...existing, ...fromDom };
+  });
 }
 
 function addRow(type) {
@@ -858,6 +911,58 @@ function showResult(type, msg) {
   const el = document.getElementById('import-result');
   el.textContent = msg;
   el.className   = `import-result show ${type}`;
+}
+
+/* ══════════════════════════════════════════
+   M3U EXPORTER
+   ══════════════════════════════════════════ */
+function exportM3U(type) {
+  if (!CFG) return;
+  const items = CFG[type] || [];
+  const resultEl = document.getElementById('export-result');
+
+  if (!items.length) {
+    resultEl.textContent = '⚠️ No hay entradas en esta categoría.';
+    resultEl.className = 'import-result show error';
+    return;
+  }
+
+  const filenames = { livetv: 'mythos-livetv.m3u', movies: 'mythos-movies.m3u', radio: 'mythos-radio.m3u' };
+
+  let lines = ['#EXTM3U'];
+
+  items.forEach(item => {
+    const name  = (item.name  || item.title || '').replace(/"/g, '');
+    const logo  = (item.logo  || item.poster || '').replace(/"/g, '');
+    const group = (type === 'livetv' ? (item.group || item.category || item.cat || '')
+                 : type === 'movies' ? (item.cat || item.genre || '')
+                 : (item.genre || '')).replace(/"/g, '');
+    const urls = item.urls && item.urls.length ? item.urls : [item.url].filter(Boolean);
+    if (!urls.length) return;
+
+    const attrs = [
+      'tvg-name="' + name + '"',
+      logo  ? 'tvg-logo="'    + logo  + '"' : '',
+      group ? 'group-title="' + group + '"' : '',
+    ].filter(Boolean).join(' ');
+
+    urls.forEach((url, idx) => {
+      lines.push('#EXTINF:-1 ' + attrs + ',' + name + (urls.length > 1 ? ' [S'+(idx+1)+']' : ''));
+      lines.push(url);
+    });
+  });
+
+  const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filenames[type];
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(a.href);
+
+  resultEl.textContent = '✅ ' + items.length + ' entradas exportadas como ' + filenames[type];
+  resultEl.className = 'import-result show ok';
 }
 
 /* ══════════════════════════════════════════
@@ -1209,6 +1314,305 @@ async function importConfig() {
     } catch { toast('❌ Archivo JSON inválido'); }
   };
   r.readAsText(file);
+}
+
+/* ══════════════════════════════════════════
+   AUTO-SCRAPER BATCH
+   ══════════════════════════════════════════ */
+
+function logLine(logEl, cls, text) {
+  const span = document.createElement('span');
+  span.className = cls;
+  span.textContent = text + '\n';
+  logEl.appendChild(span);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+/* ── Películas → TMDB ─────────────────────── */
+async function autoMetadataMovies() {
+  if (!CFG) return;
+  const movies = CFG.movies || [];
+  if (!movies.length) { toast('⚠️ No hay películas en la lista'); return; }
+
+  const btn    = document.getElementById('btn-auto-movies');
+  const card   = document.getElementById('movies-scraper-card');
+  const status = document.getElementById('movies-scraper-status');
+  const log    = document.getElementById('movies-scraper-log');
+
+  btn.disabled = true; btn.textContent = '⏳ Buscando…';
+  card.style.display = 'block';
+  log.innerHTML = '';
+  status.className = 'import-result show info';
+  status.textContent = `Procesando ${movies.length} película(s)…`;
+
+  let ok = 0, miss = 0, err = 0;
+  const forceRescan = false; // cambiar a true si se quiere re-procesar TODO, incluso lo ya confirmado
+  const failed = []; // índices de películas sin resultado, para la lista de reintento manual
+
+  for (let i = 0; i < movies.length; i++) {
+    const m     = movies[i];
+    const title = m.name || m.title || '';
+    if (!title) { logLine(log, 'miss', `[${i+1}] Sin título, omitida`); miss++; continue; }
+    if ((m.tmdbConfirmed || m.tmdbSkip) && !forceRescan) {
+      const reason = m.tmdbConfirmed ? 'ya confirmada' : 'ya vista, pendiente de corrección manual';
+      logLine(log, 'ok', `[${i+1}] "${title}" — ${reason}, omitida`); ok++; continue;
+    }
+
+    try {
+      const r    = await fetch(`${API}/admin/fetch-metadata?title=${encodeURIComponent(title)}`, { headers:{'X-Admin-Token':TOKEN} });
+      const data = await r.json();
+      if (!data.ok || !data.results.length) {
+        logLine(log, 'miss', `[${i+1}] "${title}" — sin resultados`); miss++; m.tmdbSkip = true; failed.push(i); continue;
+      }
+      // Elegir el resultado más parecido al título original, no a ciegas el primero
+      const norm = s => (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'');
+      const targetNorm = norm(title.replace(/\(\d{4}\)/,''));
+      let best = data.results.find(r => norm(r.title) === targetNorm || norm(r.original) === targetNorm);
+      if (!best) best = data.results[0];
+
+      // Buscar detalle completo para género y duración
+      let detail = best;
+      try {
+        const rd = await fetch(`${API}/admin/fetch-metadata-detail?tmdb_id=${best.tmdb_id}`, { headers:{'X-Admin-Token':TOKEN} });
+        const dd = await rd.json();
+        if (dd.ok) detail = dd.result;
+      } catch {}
+
+      if (detail.description) m.description = detail.description;
+      if (detail.poster)      m.poster      = detail.poster;
+      if (detail.year)        m.year        = detail.year;
+      if (detail.genre)       m.genre       = detail.genre;
+      if (detail.duration)    m.duration    = detail.duration;
+      if (detail.rating)      m.rating      = detail.rating;
+      m.tmdbConfirmed = true;
+
+      const variantNote = data.matchedVariant ? ` (encontrada como "${data.matchedVariant}")` : '';
+      logLine(log, 'ok', `[${i+1}] ✅ "${title}" → ${detail.year || ''}  ${detail.genre || ''}${variantNote}`);
+      ok++;
+    } catch (e) {
+      logLine(log, 'err', `[${i+1}] ❌ "${title}" — ${e.message}`); err++;
+    }
+
+    // Pausa corta para no saturar la API
+    await new Promise(r => setTimeout(r, 250));
+  }
+
+  try {
+    await saveCFG();
+    status.className = 'import-result show ok';
+    status.textContent = `✅ Listo: ${ok} actualizadas · ${miss} sin resultado · ${err} error(es) — config guardada`;
+    renderList('movies');
+    renderFailedMovies(failed);
+  } catch (e) {
+    status.className = 'import-result show error';
+    status.textContent = '❌ Error guardando: ' + e.message;
+  }
+  btn.disabled = false; btn.textContent = '🔍 Auto-metadata';
+}
+
+function showPendingMovies() {
+  if (!CFG) return;
+  const indices = (CFG.movies || []).map((m, i) => m.tmdbSkip ? i : -1).filter(i => i >= 0);
+  if (!indices.length) { toast('✅ No hay películas pendientes de corrección'); return; }
+  renderFailedMovies(indices);
+  document.getElementById('movies-failed-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function renderFailedMovies(indices) {
+  const card  = document.getElementById('movies-failed-card');
+  const count = document.getElementById('movies-failed-count');
+  const list  = document.getElementById('movies-failed-list');
+
+  if (!indices || !indices.length) { card.style.display = 'none'; return; }
+
+  card.style.display = 'block';
+  count.textContent = indices.length;
+  list.innerHTML = '';
+
+  indices.forEach(idx => {
+    const m = CFG.movies[idx];
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border,#2a2a3a);';
+    row.innerHTML = `
+      <input type="text" value="${(m.name || m.title || '').replace(/"/g,'&quot;')}" id="failfix-${idx}"
+        style="flex:1;padding:8px 10px;border-radius:8px;background:var(--input-bg,#1a1a25);border:1px solid var(--border,#2a2a3a);color:inherit;">
+      <button class="btn btn-secondary" onclick="retryFailedMovie(${idx})" id="failfix-btn-${idx}">🔄 Reintentar</button>
+      <span id="failfix-result-${idx}" style="font-size:0.8rem;min-width:160px;"></span>
+    `;
+    list.appendChild(row);
+  });
+}
+
+async function retryFailedMovie(idx) {
+  const input  = document.getElementById(`failfix-${idx}`);
+  const btn    = document.getElementById(`failfix-btn-${idx}`);
+  const result = document.getElementById(`failfix-result-${idx}`);
+  const newTitle = input.value.trim();
+  if (!newTitle) return;
+
+  btn.disabled = true;
+  result.textContent = '⏳ Buscando…';
+
+  try {
+    const r    = await fetch(`${API}/admin/fetch-metadata?title=${encodeURIComponent(newTitle)}`, { headers:{'X-Admin-Token':TOKEN} });
+    const data = await r.json();
+    if (!data.ok || !data.results.length) {
+      result.textContent = '❌ Sigue sin resultados';
+      btn.disabled = false;
+      return;
+    }
+    const norm = s => (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'');
+    const targetNorm = norm(newTitle.replace(/\(\d{4}\)/,''));
+    let best = data.results.find(r => norm(r.title) === targetNorm || norm(r.original) === targetNorm);
+    if (!best) best = data.results[0];
+
+    let detail = best;
+    try {
+      const rd = await fetch(`${API}/admin/fetch-metadata-detail?tmdb_id=${best.tmdb_id}`, { headers:{'X-Admin-Token':TOKEN} });
+      const dd = await rd.json();
+      if (dd.ok) detail = dd.result;
+    } catch {}
+
+    const m = CFG.movies[idx];
+    m.name = newTitle; // se guarda el título corregido a mano
+    if (detail.description) m.description = detail.description;
+    if (detail.poster)      m.poster      = detail.poster;
+    if (detail.year)        m.year        = detail.year;
+    if (detail.genre)       m.genre       = detail.genre;
+    if (detail.duration)    m.duration    = detail.duration;
+    if (detail.rating)      m.rating      = detail.rating;
+    m.tmdbConfirmed = true;
+    delete m.tmdbSkip;
+
+    await saveCFG();
+    renderList('movies');
+    result.textContent = `✅ ${detail.year || ''} ${detail.genre || ''}`;
+    const row = input.closest('div[style*="border-bottom"]');
+    if (row) setTimeout(() => { row.style.opacity = '0.4'; }, 300);
+    const count = document.getElementById('movies-failed-count');
+    if (count) count.textContent = Math.max(0, parseInt(count.textContent || '0') - 1);
+  } catch (e) {
+    result.textContent = '❌ ' + e.message;
+    btn.disabled = false;
+  }
+}
+
+/* ── Radio → radio-browser.info ──────────── */
+async function autoLogosRadio() {
+  if (!CFG) return;
+  const stations = CFG.radio || [];
+  if (!stations.length) { toast('⚠️ No hay estaciones en la lista'); return; }
+
+  const btn    = document.getElementById('btn-auto-radio');
+  const card   = document.getElementById('radio-scraper-card');
+  const status = document.getElementById('radio-scraper-status');
+  const log    = document.getElementById('radio-scraper-log');
+
+  btn.disabled = true; btn.textContent = '⏳ Buscando…';
+  card.style.display = 'block';
+  log.innerHTML = '';
+  status.className = 'import-result show info';
+  status.textContent = `Procesando ${stations.length} estación(es)…`;
+
+  let ok = 0, miss = 0, err = 0;
+
+  for (let i = 0; i < stations.length; i++) {
+    const s    = stations[i];
+    const name = s.name || '';
+    if (!name) { logLine(log, 'miss', `[${i+1}] Sin nombre, omitida`); miss++; continue; }
+
+    try {
+      const r    = await fetch(`${API}/admin/fetch-radio?name=${encodeURIComponent(name)}&limit=3`, { headers:{'X-Admin-Token':TOKEN} });
+      const data = await r.json();
+      if (!data.ok || !data.results.length) {
+        logLine(log, 'miss', `[${i+1}] "${name}" — sin resultados`); miss++; continue;
+      }
+      const best = data.results[0];
+      if (best.logo) {
+        s.logo = best.logo;
+        logLine(log, 'ok', `[${i+1}] ✅ "${name}" → logo encontrado`);
+        ok++;
+      } else {
+        logLine(log, 'miss', `[${i+1}] "${name}" — sin logo`); miss++;
+      }
+    } catch (e) {
+      logLine(log, 'err', `[${i+1}] ❌ "${name}" — ${e.message}`); err++;
+    }
+    await new Promise(r => setTimeout(r, 200));
+  }
+
+  try {
+    await saveCFG();
+    status.className = 'import-result show ok';
+    status.textContent = `✅ Listo: ${ok} con logo · ${miss} sin resultado · ${err} error(es) — config guardada`;
+    renderList('radio');
+  } catch (e) {
+    status.className = 'import-result show error';
+    status.textContent = '❌ Error guardando: ' + e.message;
+  }
+  btn.disabled = false; btn.textContent = '🔍 Buscar logos';
+}
+
+/* ── Live TV → iptv-org ───────────────────── */
+let _iptvOrgCache = null; // cache del JSON para no descargarlo N veces
+
+async function autoLogosLiveTV() {
+  if (!CFG) return;
+  const channels = CFG.livetv || [];
+  if (!channels.length) { toast('⚠️ No hay canales en la lista'); return; }
+
+  const btn    = document.getElementById('btn-auto-livetv');
+  const card   = document.getElementById('livetv-scraper-card');
+  const status = document.getElementById('livetv-scraper-status');
+  const log    = document.getElementById('livetv-scraper-log');
+
+  btn.disabled = true; btn.textContent = '⏳ Buscando…';
+  card.style.display = 'block';
+  log.innerHTML = '';
+  status.className = 'import-result show info';
+  status.textContent = 'Descargando base de datos iptv-org…';
+
+  let ok = 0, miss = 0, err = 0;
+
+  try {
+    // Un solo fetch para todos los canales — el endpoint del servidor cachea implícitamente
+    // vía el proceso Node (en memoria durante la sesión). Aquí hacemos una sola llamada
+    // con un nombre genérico para obtener todos los resultados y hacer el match localmente.
+    // Pero la API del servidor requiere ?name=, así que hacemos el match canal por canal
+    // pero reutilizamos el caché del lado cliente.
+
+    status.textContent = `Procesando ${channels.length} canal(es)…`;
+
+    for (let i = 0; i < channels.length; i++) {
+      const ch   = channels[i];
+      const name = ch.name || '';
+      if (!name) { logLine(log, 'miss', `[${i+1}] Sin nombre, omitido`); miss++; continue; }
+      if (ch.logo) { logLine(log, 'ok', `[${i+1}] "${name}" — ya tiene logo, omitido`); ok++; continue; }
+
+      try {
+        const r    = await fetch(`${API}/admin/fetch-channel-logo?name=${encodeURIComponent(name)}`, { headers:{'X-Admin-Token':TOKEN} });
+        const data = await r.json();
+        if (!data.ok || !data.results.length) {
+          logLine(log, 'miss', `[${i+1}] "${name}" — sin match`); miss++; continue;
+        }
+        ch.logo = data.results[0].logo;
+        logLine(log, 'ok', `[${i+1}] ✅ "${name}" → ${data.results[0].name}`);
+        ok++;
+      } catch (e) {
+        logLine(log, 'err', `[${i+1}] ❌ "${name}" — ${e.message}`); err++;
+      }
+      await new Promise(r => setTimeout(r, 150));
+    }
+
+    await saveCFG();
+    status.className = 'import-result show ok';
+    status.textContent = `✅ Listo: ${ok} con logo · ${miss} sin match · ${err} error(es) — config guardada`;
+    renderList('livetv');
+  } catch (e) {
+    status.className = 'import-result show error';
+    status.textContent = '❌ Error: ' + e.message;
+  }
+  btn.disabled = false; btn.textContent = '🔍 Buscar logos';
 }
 
 /* ══════════════════════════════════════════

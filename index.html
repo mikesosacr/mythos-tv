@@ -51,10 +51,10 @@
             border-radius:10px;padding:11px 14px;color:#f0f0fa;font-size:0.9rem;font-family:inherit;outline:none;" />
         </div>
         <div style="margin-bottom:20px;">
-          <div style="font-size:0.7rem;font-weight:600;color:rgba(255,255,255,0.35);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px;">PIN (4 dígitos)</div>
-          <input type="password" id="user-login-pin" placeholder="••••" maxlength="4" inputmode="numeric"
+          <div style="font-size:0.7rem;font-weight:600;color:rgba(255,255,255,0.35);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px;" id="user-login-pin-label">PIN (4 dígitos)</div>
+          <input type="password" id="user-login-pin" placeholder="••••"
             style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);
-            border-radius:10px;padding:11px 14px;color:#f0f0fa;font-size:1.2rem;letter-spacing:0.3em;font-family:inherit;outline:none;" />
+            border-radius:10px;padding:11px 14px;color:#f0f0fa;font-size:1.2rem;letter-spacing:0.15em;font-family:inherit;outline:none;" />
         </div>
         <button id="user-login-btn" onclick="doUserLogin()"
           style="width:100%;background:linear-gradient(135deg,#7c6af7,#3ecfcf);border:none;color:#fff;
@@ -181,6 +181,13 @@
           <div class="home-subtitle">¿Qué quieres ver hoy?</div>
         </div>
 
+        <!-- Continuar viendo -->
+        <div class="home-suggestions" id="suggestions-continue-wrap">
+          <div class="suggestions-label">Continuar viendo</div>
+          <div class="suggestions-row" id="suggestions-continue" role="list" aria-label="Continuar viendo">
+          </div>
+        </div>
+
         <!-- Sugerencias: Películas -->
         <div class="home-suggestions" id="suggestions-movies-wrap">
           <div class="suggestions-label">Películas sugeridas</div>
@@ -222,6 +229,10 @@
               <div class="detail-badge hidden" id="detail-badge">● EN VIVO</div>
               <div class="detail-title" id="detail-title"></div>
               <div class="detail-meta" id="detail-meta"></div>
+              <div class="detail-progress-wrap hidden" id="detail-progress-wrap">
+                <div class="detail-progress-bar"><div class="detail-progress-fill" id="detail-progress-fill"></div></div>
+                <span class="detail-progress-label" id="detail-progress-label"></span>
+              </div>
               <div class="detail-desc" id="detail-desc"></div>
             </div>
           </div>
@@ -232,6 +243,7 @@
             </button>
             <button class="detail-btn-close" id="detail-close-btn">Volver</button>
           </div>
+          <button class="detail-btn-restart hidden" id="detail-restart-btn">Empezar desde el inicio</button>
         </div>
       </div>
 
@@ -249,18 +261,8 @@
 
         <div class="settings-grid">
           <div class="settings-section">
-            <h3 class="settings-section-title">Apps &amp; Links</h3>
-            <div class="settings-list" id="settings-apps-list">
-              <!-- rendered by JS -->
-            </div>
-          </div>
-          <div class="settings-section">
-            <h3 class="settings-section-title">Sistema</h3>
+            <h3 class="settings-section-title">Apariencia</h3>
             <div class="settings-list">
-              <div class="settings-item">
-                <label class="settings-label">Nombre del sistema</label>
-                <input type="text" class="settings-input" id="setting-system-name" value="MythOS TV" placeholder="Ej: Casa Sola" />
-              </div>
               <div class="settings-item">
                 <label class="settings-label">Fondo de pantalla</label>
                 <select class="settings-select" id="setting-wallpaper">
@@ -287,6 +289,34 @@
             </div>
           </div>
           <div class="settings-section">
+            <h3 class="settings-section-title">Hora &amp; Región</h3>
+            <div class="settings-list">
+              <div class="settings-item">
+                <label class="settings-label">Formato de hora</label>
+                <select class="settings-select" id="setting-time-format">
+                  <option value="24h">24 horas (14:30)</option>
+                  <option value="12h">12 horas (2:30 PM)</option>
+                </select>
+              </div>
+              <div class="settings-item">
+                <label class="settings-label">Zona horaria</label>
+                <select class="settings-select" id="setting-timezone">
+                  <option value="America/Costa_Rica">Costa Rica (UTC-6)</option>
+                  <option value="America/Mexico_City">México Central (UTC-6)</option>
+                  <option value="America/Bogota">Colombia (UTC-5)</option>
+                  <option value="America/Lima">Perú (UTC-5)</option>
+                  <option value="America/Caracas">Venezuela (UTC-4)</option>
+                  <option value="America/Santiago">Chile (UTC-3/-4)</option>
+                  <option value="America/Argentina/Buenos_Aires">Argentina (UTC-3)</option>
+                  <option value="America/Sao_Paulo">Brasil (UTC-3)</option>
+                  <option value="Europe/Madrid">España (UTC+1/+2)</option>
+                  <option value="America/New_York">Este EE.UU. (UTC-5/-4)</option>
+                  <option value="America/Los_Angeles">Oeste EE.UU. (UTC-8/-7)</option>
+                </select>
+              </div>
+            </div>
+          </div>
+          <div class="settings-section">
             <h3 class="settings-section-title">Acerca de</h3>
             <div class="settings-about">
               <div class="about-logo">Myth<span>OS TV</span></div>
@@ -298,6 +328,14 @@
         </div>
         <div class="settings-footer">
           <button class="btn-primary" id="settings-save">Guardar cambios</button>
+          <button id="settings-logout" onclick="doLogout()" style="
+            background:none;border:1px solid rgba(239,68,68,0.4);color:rgba(239,68,68,0.8);
+            padding:11px 24px;border-radius:10px;font-size:0.85rem;font-family:inherit;
+            cursor:pointer;transition:0.15s;margin-top:10px;width:100%;
+          " onmouseover="this.style.borderColor='rgba(239,68,68,0.8)';this.style.color='#ef4444'"
+             onmouseout="this.style.borderColor='rgba(239,68,68,0.4)';this.style.color='rgba(239,68,68,0.8)'">
+            Cerrar sesión
+          </button>
         </div>
       </section>
 
@@ -327,9 +365,6 @@
 
   </div><!-- /#app -->
 
-  <!-- AUDIO ENGINE (invisible) -->
-  <audio id="snd-nav" src="" preload="none"></audio>
-  <audio id="snd-enter" src="" preload="none"></audio>
 
   <!-- PWA INSTALL BANNER -->
   <!-- PWA INSTALL BANNER — detecta navegador/plataforma automáticamente -->
@@ -468,31 +503,49 @@
       subtitle.textContent = info.subtitle;
       installBtn.textContent = info.btnLabel;
 
-      if (info.manual) {
-        // Sin prompt automático — mostrar instrucciones paso a paso
+      // Si el browser capturó beforeinstallprompt (ej. Chrome en T95/Android Box),
+      // usarlo siempre aunque detectPlatform() haya devuelto 'android-tv' (manual).
+      const hasPrompt = !!_pwaPrompt;
+
+      if (!info.manual || hasPrompt) {
+        // Tiene prompt automático — botón instala directamente
+        stepsDiv.style.display = 'none';
+        installBtn.textContent = 'Instalar';
+        installBtn.onclick = async () => {
+          if (!_pwaPrompt) return;
+          try {
+            _pwaPrompt.prompt();
+            const { outcome } = await _pwaPrompt.userChoice;
+          } catch(e) {}
+          _pwaPrompt = null;
+          _pwaUnlockNav();
+          banner.style.display = 'none';
+        };
+      } else {
+        // Sin prompt — instrucciones manuales
         stepsDiv.style.display = 'block';
         stepsCnt.innerHTML = info.steps;
         installBtn.onclick = () => {
-          // Toggle instrucciones si ya están visibles, o solo cerrar
+          _pwaUnlockNav();
           banner.style.display = 'none';
           localStorage.setItem('pwa-dismissed', '1');
         };
-      } else {
-        // Tiene prompt automático (Chrome/Edge)
-        stepsDiv.style.display = 'none';
-        installBtn.onclick = async () => {
-          if (!_pwaPrompt) return;
-          _pwaPrompt.prompt();
-          const { outcome } = await _pwaPrompt.userChoice;
-          _pwaPrompt = null;
-          banner.style.display = 'none';
-        };
       }
 
+      // Bloquear navegación del remoto hacia el launcher mientras el banner esté visible
+      _pwaLockNav();
+
       banner.style.display = 'flex';
+      // Forzar foco en el botón para que el remoto lo active directamente
+      setTimeout(() => installBtn.focus(), 80);
     }
 
     // Capturar prompt automático (Chrome/Edge)
+    // Bloqueo de navegación del remoto mientras el banner PWA está visible.
+    // app.js lee window._pwaNavLocked en handleKey y bloquea el launcher.
+    function _pwaLockNav()   { window._pwaNavLocked = true;  }
+    function _pwaUnlockNav() { window._pwaNavLocked = false; }
+
     window.addEventListener('beforeinstallprompt', e => {
       e.preventDefault();
       _pwaPrompt = e;
@@ -503,6 +556,7 @@
     // via triggerPWABanner() para no interferir con la pantalla de login
 
     document.getElementById('pwa-dismiss-btn')?.addEventListener('click', () => {
+      _pwaUnlockNav();
       document.getElementById('pwa-banner').style.display = 'none';
       localStorage.setItem('pwa-dismissed', '1');
     });
@@ -515,15 +569,38 @@
   </script>
 
   <script>
-    /* ── User login / register ── */
+    /* ── User login / register / admin ── */
     let _selectedEmoji = '🎬';
-    let _currentUser   = null;  // { username, emoji, prefs, ... }
+    let _currentUser   = null;  // { username, emoji, prefs, isAdmin?, adminToken? }
+
+    /* Admin no tiene "prefs" propias en users.json -> las suyas viven en el
+       config global (la misma fuente que admin.html -> Sistema usa) */
+    async function fetchAdminPrefs() {
+      try {
+        const r   = await fetch('/api/config');
+        const cfg = await r.json();
+        return {
+          wallpaper:  cfg.wallpaper  || 'default',
+          timeFormat: cfg.timeFormat || '24h',
+          timezone:   cfg.timezone   || 'America/Costa_Rica',
+        };
+      } catch {
+        return { wallpaper: 'default', timeFormat: '24h', timezone: 'America/Costa_Rica' };
+      }
+    }
+
+    /* Detecta si el intento es de admin:
+       usuario = 'admin' Y (contraseña tiene letras O longitud > 4) */
+    function isAdminAttempt(username, pass) {
+      return username.toLowerCase() === 'admin' && (pass.length > 4 || /[a-zA-Z]/.test(pass));
+    }
 
     function showUserLogin() {
       document.getElementById('user-login-panel').style.display = '';
       document.getElementById('user-register-panel').style.display = 'none';
       document.getElementById('user-screen-subtitle').textContent = 'Tu espacio de entretenimiento';
       document.getElementById('user-login-error').textContent = '';
+      updatePinLabel();
     }
 
     function showUserRegister() {
@@ -543,29 +620,78 @@
       btn.style.borderColor = '#7c6af7';
     }
 
+    /* Actualiza el label del campo contraseña según lo que el usuario escribe en "Usuario" */
+    function updatePinLabel() {
+      const username = document.getElementById('user-login-name').value.trim();
+      const label    = document.getElementById('user-login-pin-label');
+      const pinInput = document.getElementById('user-login-pin');
+      if (!label || !pinInput) return;
+      if (username.toLowerCase() === 'admin') {
+        label.textContent = 'Contraseña';
+        pinInput.removeAttribute('maxlength');
+        pinInput.removeAttribute('inputmode');
+        pinInput.placeholder = '••••••••';
+      } else {
+        label.textContent = 'PIN (4 dígitos)';
+        pinInput.setAttribute('maxlength', '4');
+        pinInput.setAttribute('inputmode', 'numeric');
+        pinInput.placeholder = '••••';
+      }
+    }
+
     async function doUserLogin() {
       const username = document.getElementById('user-login-name').value.trim();
-      const pin      = document.getElementById('user-login-pin').value.trim();
+      const pass     = document.getElementById('user-login-pin').value.trim();
       const errEl    = document.getElementById('user-login-error');
       errEl.textContent = '';
-      if (!username || !pin) { errEl.textContent = 'Completa todos los campos'; return; }
+      if (!username || !pass) { errEl.textContent = 'Completa todos los campos'; return; }
 
+      // ── Intento de login como admin ──
+      if (isAdminAttempt(username, pass)) {
+        try {
+          const r    = await fetch('/api/admin/login', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user: username, pass }),
+          });
+          const data = await r.json();
+          if (data.ok) {
+            _currentUser = {
+              username:   'admin',
+              emoji:      '⚙️',
+              isAdmin:    true,
+              adminToken: data.token,
+              prefs: await fetchAdminPrefs(),
+            };
+            sessionStorage.setItem('mytv-user', JSON.stringify({ username: 'admin', pass, isAdmin: true }));
+            enterApp();
+          } else {
+            errEl.textContent = data.error || 'Credenciales de admin incorrectas';
+          }
+        } catch { errEl.textContent = 'Error de conexión con el servidor'; }
+        return;
+      }
+
+      // ── Login de usuario normal con PIN ──
+      if (!/^\d{4}$/.test(pass)) {
+        errEl.textContent = 'El PIN debe ser 4 dígitos numéricos';
+        return;
+      }
       try {
         const r    = await fetch('/api/users/login', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username, pin }),
+          body: JSON.stringify({ username, pin: pass }),
         });
         const data = await r.json();
         if (data.ok) {
-          _currentUser = { ...data.user, pin };  // guardamos pin en memoria para guardar prefs
-          sessionStorage.setItem('mytv-user', JSON.stringify({ username, pin }));
+          _currentUser = { ...data.user, pin: pass };
+          sessionStorage.setItem('mytv-user', JSON.stringify({ username, pin: pass }));
           enterApp();
         } else {
-          if (data.error === 'pending')  errEl.textContent = '⏳ Tu cuenta está pendiente de aprobación';
-          else if (data.error === 'blocked') errEl.textContent = '🚫 Tu cuenta ha sido bloqueada';
+          if (data.error === 'pending')       errEl.textContent = '⏳ Tu cuenta está pendiente de aprobación';
+          else if (data.error === 'blocked')  errEl.textContent = '🚫 Tu cuenta ha sido bloqueada';
           else errEl.textContent = data.error || 'Error al iniciar sesión';
         }
-      } catch (e) { errEl.textContent = 'Error de conexión con el servidor'; }
+      } catch { errEl.textContent = 'Error de conexión con el servidor'; }
     }
 
     async function doUserRegister() {
@@ -593,15 +719,13 @@
           errEl.style.color = '#ef4444';
           errEl.textContent = data.error || 'Error al registrar';
         }
-      } catch (e) { errEl.textContent = 'Error de conexión con el servidor'; }
+      } catch { errEl.textContent = 'Error de conexión con el servidor'; }
     }
 
     function enterApp() {
       document.getElementById('user-screen').style.display = 'none';
-      // Aplicar prefs del usuario antes del boot
       if (_currentUser?.prefs) window._userPrefs = _currentUser.prefs;
       boot();
-      // Banner PWA después del boot (funciona en todos los navegadores)
       setTimeout(() => {
         if (typeof showPWABanner === 'function' && !localStorage.getItem('pwa-dismissed')) {
           showPWABanner();
@@ -609,26 +733,53 @@
       }, 5000);
     }
 
+    /* Logout: limpia sesión y vuelve al login */
+    function doLogout() {
+      sessionStorage.removeItem('mytv-user');
+      _currentUser = null;
+      // Recargar la página es lo más limpio — resetea todo el estado
+      window.location.reload();
+    }
+
     // Auto-login si hay sesión guardada
     window.addEventListener('DOMContentLoaded', async () => {
       const saved = sessionStorage.getItem('mytv-user');
       if (saved) {
         try {
-          const { username, pin } = JSON.parse(saved);
-          const r    = await fetch('/api/users/login', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username, pin }),
-          });
-          const data = await r.json();
-          if (data.ok) {
-            _currentUser = { ...data.user, pin };
-            enterApp();
-            return;
+          const session = JSON.parse(saved);
+          // ── Auto-login admin ──
+          if (session.isAdmin && session.pass) {
+            const r    = await fetch('/api/admin/login', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ user: 'admin', pass: session.pass }),
+            });
+            const data = await r.json();
+            if (data.ok) {
+              _currentUser = {
+                username: 'admin', emoji: '⚙️', isAdmin: true, adminToken: data.token,
+                prefs: await fetchAdminPrefs(),
+              };
+              enterApp();
+              return;
+            }
+          }
+          // ── Auto-login usuario ──
+          if (session.username && session.pin) {
+            const r    = await fetch('/api/users/login', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ username: session.username, pin: session.pin }),
+            });
+            const data = await r.json();
+            if (data.ok) {
+              _currentUser = { ...data.user, pin: session.pin };
+              enterApp();
+              return;
+            }
           }
         } catch {}
         sessionStorage.removeItem('mytv-user');
       }
-      // Sin sesión válida → mostrar pantalla de login
+      // Sin sesión válida → mostrar login
       const scr = document.getElementById('user-screen');
       if (scr) scr.style.display = 'flex';
       try { document.getElementById('user-login-name').focus(); } catch {}
@@ -641,6 +792,9 @@
     ['user-reg-pin','user-reg-pin2'].forEach(id => {
       document.getElementById(id)?.addEventListener('keydown', e => { if (e.key === 'Enter') doUserRegister(); });
     });
+
+    // Actualizar label PIN/Contraseña en tiempo real
+    document.getElementById('user-login-name')?.addEventListener('input', updatePinLabel);
   </script>
 
 </body>

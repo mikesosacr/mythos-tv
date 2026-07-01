@@ -79,6 +79,7 @@ html, body {
 }
 
 /* ── Scrollbar (minimal, TV aesthetic) ────────────────────────── */
+@keyframes player-spin { to { transform: rotate(360deg); } }
 ::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--accent-primary); border-radius: 2px; opacity: 0.4; }
@@ -392,7 +393,9 @@ body::after {
   height: 100%;
   padding-top: 20px;
   padding-bottom: 20px;
-  overflow: visible;
+  /* Sin overflow:visible — si el contenido no cabe en pantallas chicas o
+     ventana no-fullscreen, hereda overflow-y:auto de .screen (scroll de
+     respaldo) en vez de recortar el dock fuera de vista. */
 }
 
 .home-hero {
@@ -480,6 +483,69 @@ body::after {
   color: var(--text-muted);
   text-align: center;
   margin-top: 5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Tarjeta de "Continuar viendo" (poster vertical + barra de progreso)
+   Fila deliberadamente más compacta que las demás — usa más columnas
+   (tarjetas más angostas → más bajas, proporción 2:3 intacta) para que
+   la sección no empuje el dock fuera de la pantalla en ventanas chicas. */
+#suggestions-continue-wrap .suggestions-label {
+  margin-bottom: 6px;
+}
+#suggestions-continue {
+  grid-template-columns: repeat(18, 1fr);
+  gap: 8px;
+  padding: 2px 2px 10px;
+}
+.sugg-continue-card {
+  cursor: pointer;
+  border-radius: 6px;
+  border: 2px solid transparent;
+  transition: border-color 0.15s, transform 0.15s;
+  outline: none;
+  min-width: 0;
+  position: relative;
+}
+.sugg-continue-card:hover,
+.sugg-continue-card.focused {
+  border-color: #7c6af7;
+  transform: scale(1.1) translateY(-4px);
+  z-index: 2;
+  position: relative;
+  box-shadow: 0 0 0 2px rgba(124,106,247,0.4), 0 0 16px rgba(124,106,247,0.35);
+}
+.sugg-continue-card .sm-poster,
+.sugg-continue-card .sm-poster-fallback {
+  width: 100%;
+  aspect-ratio: 2/3;
+  border-radius: 5px;
+  object-fit: cover;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.3rem;
+  background: rgba(124,106,247,0.12);
+}
+.sugg-continue-progress {
+  height: 2px;
+  border-radius: 2px;
+  background: rgba(255,255,255,0.2);
+  margin-top: 3px;
+  overflow: hidden;
+}
+.sugg-continue-progress-fill {
+  height: 100%;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #7c6af7, #3ecfcf);
+}
+.sugg-continue-card .sm-title {
+  font-size: 0.58rem;
+  color: var(--text-muted);
+  text-align: center;
+  margin-top: 3px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -622,6 +688,47 @@ body::after {
   color: var(--text-secondary);
   line-height: 1.5;
 }
+/* "Continuar viendo" — barra de progreso dentro del modal de detalle */
+.detail-progress-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.detail-progress-wrap.hidden { display: none; }
+.detail-progress-bar {
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255,255,255,0.15);
+  overflow: hidden;
+}
+.detail-progress-fill {
+  height: 100%;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #7c6af7, #3ecfcf);
+}
+.detail-progress-label {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+.detail-btn-restart {
+  display: block;
+  width: calc(100% - 44px);
+  margin: -10px 22px 20px;
+  padding: 4px 16px 0;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  text-decoration: underline;
+  cursor: pointer;
+  text-align: center;
+}
+.detail-btn-restart.hidden { display: none; }
+.detail-btn-restart:hover,
+.detail-btn-restart:focus { color: var(--text-secondary); }
 .detail-actions {
   display: flex;
   gap: 10px;
@@ -1641,3 +1748,266 @@ input:checked + .toggle-slider::before {
 .player-chrome-visible #player-controls {
   opacity: 1;
 }
+
+/* ══════════════════════════════════════════════════════════════
+   TEMA NETFLIX — filas horizontales por categoría (Películas)
+   Activado vía .theme-netflix en <body> desde admin (Sistema → Tema)
+   ══════════════════════════════════════════════════════════════ */
+.nf-rows {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+  padding: 4px 0 24px;
+}
+
+.nf-row-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: rgba(255,255,255,0.9);
+  margin: 0 0 12px 16px;
+  letter-spacing: 0.02em;
+}
+.nf-row-accent {
+  display: inline-block;
+  width: 3px;
+  height: 16px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.nf-row-track-wrap {
+  position: relative;
+}
+
+.nf-row-track {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  overflow-y: visible;
+  scroll-behavior: smooth;
+  padding: 6px 16px 14px;
+  scrollbar-width: none;
+}
+.nf-row-track::-webkit-scrollbar { display: none; }
+
+/* Flechas de navegación (uso con mouse) — aparecen al pasar el mouse
+   sobre la fila, se ocultan solas al llegar al inicio/final del scroll
+   (ver toggle de .nf-arrow-hidden en app.js). */
+.nf-row-arrow {
+  position: absolute;
+  top: 0;
+  bottom: 14px;
+  width: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  color: rgba(255,255,255,0.9);
+  font-size: 1.8rem;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  z-index: 3;
+}
+.nf-row-track-wrap:hover .nf-row-arrow:not(.nf-arrow-hidden) {
+  opacity: 1;
+}
+.nf-row-arrow.nf-arrow-hidden {
+  pointer-events: none;
+}
+.nf-row-arrow:hover {
+  color: var(--accent, #7c6af7);
+}
+.nf-row-arrow.nf-arrow-left {
+  left: 0;
+  background: linear-gradient(90deg, rgba(10,10,16,0.85) 0%, rgba(10,10,16,0.55) 55%, transparent 100%);
+}
+.nf-row-arrow.nf-arrow-right {
+  right: 0;
+  background: linear-gradient(270deg, rgba(10,10,16,0.85) 0%, rgba(10,10,16,0.55) 55%, transparent 100%);
+}
+
+.nf-card {
+  flex: 0 0 auto;
+  width: 130px;
+  cursor: pointer;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #1a1a24;
+  border: 2px solid transparent;
+  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+  content-visibility: auto;
+  contain-intrinsic-size: 130px 230px;
+  position: relative;
+}
+.nf-card.focused,
+.nf-card:hover {
+  transform: scale(1.07);
+  border-color: var(--accent, #7c6af7);
+  box-shadow: 0 6px 24px rgba(0,0,0,0.6);
+  z-index: 2;
+}
+
+.nf-card-poster {
+  width: 100%;
+  height: 195px;
+  object-fit: cover;
+  display: block;
+}
+.nf-card-fallback {
+  width: 100%;
+  height: 195px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2.2rem;
+  background: rgba(255,255,255,0.04);
+}
+/* "Continuar viendo" — barra de progreso superpuesta al pie del póster */
+.nf-card-progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 33px; /* justo encima de .nf-card-title */
+  height: 3px;
+  background: rgba(0,0,0,0.5);
+}
+.nf-card-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #7c6af7, #3ecfcf);
+}
+.nf-card-title {
+  padding: 7px 8px 9px;
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: rgba(255,255,255,0.8);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  background: #1a1a24;
+}
+
+/* ── Modal de detalle — tema Netflix ────────────────────────────
+   Poster como hero a todo ancho con gradiente oscuro hacia abajo.
+   Título y meta flotan sobre la imagen. Play blanco sólido.
+   Live TV: logo centrado (no hero a sangre — logos transparentes).
+   Tema default: intacto, sin tocar.
+   ──────────────────────────────────────────────────────────── */
+.theme-netflix .detail-card {
+  width: 520px;
+  max-width: 94vw;
+  border-radius: 12px;
+  background-size: cover;
+  background-position: center top;
+  background-color: #141414;
+  border: none;
+  overflow: hidden;
+  position: relative;
+}
+.theme-netflix .detail-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom, rgba(0,0,0,0.05) 0%, rgba(0,0,0,0.5) 45%, rgba(0,0,0,0.94) 100%);
+  pointer-events: none;
+  z-index: 0;
+}
+.theme-netflix .detail-top {
+  display: block;
+  padding: 0;
+  min-height: 200px;
+  position: relative;
+}
+.theme-netflix .detail-poster {
+  width: 100%;
+  height: 190px;
+  border-radius: 0;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 4rem;
+}
+.theme-netflix .detail-info {
+  position: relative;
+  z-index: 1;
+  padding: 0 22px 12px;
+}
+.theme-netflix .detail-badge {
+  background: #e50914;
+  background-image: none;
+  font-size: 0.6rem;
+  letter-spacing: 0.08em;
+  border-radius: 3px;
+  margin-bottom: 8px;
+}
+.theme-netflix .detail-title {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 4px;
+  text-shadow: 0 1px 8px rgba(0,0,0,0.8);
+}
+.theme-netflix .detail-meta {
+  font-size: 0.78rem;
+  color: rgba(255,255,255,0.72);
+  margin-bottom: 8px;
+}
+.theme-netflix .detail-desc {
+  font-size: 0.82rem;
+  color: rgba(255,255,255,0.85);
+  line-height: 1.55;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.theme-netflix .detail-actions {
+  position: relative;
+  z-index: 1;
+  padding: 12px 22px 22px;
+  background: rgba(0,0,0,0.3);
+  gap: 12px;
+}
+.theme-netflix .detail-btn-play {
+  background: #fff;
+  color: #000;
+  font-weight: 700;
+  border-radius: 6px;
+  font-size: 0.9rem;
+}
+.theme-netflix .detail-btn-play:hover,
+.theme-netflix .detail-btn-play:focus { background: rgba(255,255,255,0.85); opacity: 1; }
+.theme-netflix .detail-btn-close {
+  background: rgba(109,109,110,0.7);
+  border-color: transparent;
+  color: #fff;
+  font-weight: 600;
+  border-radius: 6px;
+}
+.theme-netflix .detail-btn-close:hover,
+.theme-netflix .detail-btn-close:focus { background: rgba(109,109,110,0.9); }
+
+/* "Continuar viendo" — barra de progreso y botón reiniciar sobre el hero */
+.theme-netflix .detail-progress-bar {
+  background: rgba(255,255,255,0.25);
+}
+.theme-netflix .detail-progress-label {
+  color: rgba(255,255,255,0.75);
+}
+.theme-netflix .detail-btn-restart {
+  position: relative;
+  z-index: 1;
+  background: rgba(0,0,0,0.3);
+  color: rgba(255,255,255,0.65);
+  margin: -12px 0 0;
+  width: 100%;
+  padding: 0 22px 18px;
+}
+.theme-netflix .detail-btn-restart:hover,
+.theme-netflix .detail-btn-restart:focus { color: #fff; }
