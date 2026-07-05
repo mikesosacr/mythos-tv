@@ -1,7 +1,10 @@
 // MythOS TV — Service Worker
 // Habilita instalación PWA y caché offline básico
 
-const CACHE_NAME = 'mythos-tv-v1';
+// v2: bump manual para forzar una activación limpia (se descarta el
+// cache viejo mythos-tv-v1 en el evento activate). Subir este número
+// en cada deploy que quieras forzar a limpiar caché vieja de golpe.
+const CACHE_NAME = 'mythos-tv-v2';
 const PRECACHE = [
   '/',
   '/index.html',
@@ -12,11 +15,26 @@ const PRECACHE = [
   '/assets/icons/icon-512.png',
 ];
 
-// Instalación — pre-cachear archivos core
+// Instalación — pre-cachear archivos core.
+// IMPORTANTE: cache.addAll() es todo-o-nada — si UNA sola URL de
+// PRECACHE falla (404, ruta movida, red caída un instante), la
+// promesa completa rechaza y el navegador descarta esta versión del
+// SW entera, quedándose pegado en la versión anterior para siempre
+// (aunque subas correcciones después, nunca se instalan). Por eso
+// acá se cachea cada recurso por separado con su propio catch, así
+// un ícono roto no tumba la actualización del resto.
 self.addEventListener('install', e => {
   e.waitUntil(
     caches.open(CACHE_NAME)
-      .then(cache => cache.addAll(PRECACHE))
+      .then(cache =>
+        Promise.all(
+          PRECACHE.map(url =>
+            cache.add(url).catch(err => {
+              console.warn('[SW] no se pudo precachear', url, err);
+            })
+          )
+        )
+      )
       .then(() => self.skipWaiting())
   );
 });
@@ -47,9 +65,14 @@ self.addEventListener('fetch', e => {
     return;
   }
 
-  // Network first para archivos propios
+  // Network first para archivos propios. cache:'reload' fuerza a
+  // ignorar también el caché HTTP normal del navegador (no solo el
+  // caché del Service Worker) — si el server manda cache-control
+  // largo en los estáticos, "network first" sin esto podía terminar
+  // resolviendo igual desde el disco local del navegador en vez de
+  // pedir el archivo fresco de verdad.
   e.respondWith(
-    fetch(e.request)
+    fetch(e.request, { cache: 'reload' })
       .then(res => {
         // Actualizar caché con respuesta fresca
         if (res && res.status === 200 && res.type === 'basic') {

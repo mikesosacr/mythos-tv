@@ -100,6 +100,9 @@
     .form-row { display:flex; gap:12px; align-items:flex-end; margin-bottom:10px; }
 
     /* ── ITEM ROWS ─────────────────────────────── */
+    .sort-th { cursor:pointer; user-select:none; display:inline-flex; align-items:center; gap:3px; transition:color 0.15s; }
+    .sort-th:hover { color:var(--text); }
+    .sort-arrow { display:inline-block; width:10px; font-style:normal; font-size:0.75rem; line-height:1; opacity:0.9; }
     .item-list { display:flex; flex-direction:column; gap:8px; margin-bottom:16px; }
     .item-row { display:grid; gap:8px; align-items:center; padding:10px 12px; background:rgba(255,255,255,0.03); border:1px solid var(--border); border-radius:9px; transition:0.15s; }
     .item-row:hover { background:rgba(255,255,255,0.05); }
@@ -298,7 +301,7 @@
         <div class="card">
           <div class="card-title"><span class="dot"></span> Canales <span class="tag" id="livetv-count">0</span></div>
           <div style="display:grid;grid-template-columns:48px 1fr 130px 1fr 1fr 36px;gap:8px;padding:0 12px 8px;font-size:0.65rem;font-weight:700;letter-spacing:0.07em;color:var(--muted2);text-transform:uppercase;">
-            <span>Emoji</span><span>Nombre</span><span>Categoría</span><span>URL Stream</span><span>URL Logo</span><span></span>
+            <span>Emoji</span><span class="sort-th" onclick="sortList('livetv','name')">Nombre<i class="sort-arrow" id="sort-arrow-livetv-name"></i></span><span class="sort-th" onclick="sortList('livetv','cat')">Categoría<i class="sort-arrow" id="sort-arrow-livetv-cat"></i></span><span class="sort-th" onclick="sortList('livetv','url')">URL Stream<i class="sort-arrow" id="sort-arrow-livetv-url"></i></span><span>URL Logo</span><span></span>
           </div>
           <div class="item-list" id="livetv-list"></div>
           <button class="btn btn-secondary btn-sm" onclick="addRow('livetv')" style="margin-top:4px;">➕ Agregar canal</button>
@@ -307,7 +310,7 @@
 
       <!-- MOVIES -->
       <section class="page" id="page-movies">
-        <div class="page-header"><div><div class="page-title">Películas / VOD</div><div class="page-subtitle">Contenido bajo demanda</div></div><div class="header-actions"><button class="btn btn-secondary" onclick="addRow('movies')">➕ Película</button><button class="btn btn-secondary" onclick="autoMetadataMovies()" id="btn-auto-movies">🔍 Auto-metadata</button><button class="btn btn-secondary" onclick="showPendingMovies()">📋 Ver pendientes</button><button class="btn btn-primary" onclick="saveAll('movies')">💾 Guardar</button></div></div>
+        <div class="page-header"><div><div class="page-title">Películas / VOD</div><div class="page-subtitle">Contenido bajo demanda</div></div><div class="header-actions"><button class="btn btn-secondary" onclick="addRow('movies')">➕ Película</button><button class="btn btn-secondary" onclick="autoMetadataMovies()" id="btn-auto-movies">🔍 Auto-metadata</button><button class="btn btn-secondary" onclick="fillMissingBackdrops()" id="btn-fill-backdrops">🖼️ Rellenar backdrops</button><button class="btn btn-secondary" onclick="showPendingMovies()">📋 Ver pendientes</button><button class="btn btn-primary" onclick="saveAll('movies')">💾 Guardar</button></div></div>
         <div class="card" id="movies-scraper-card" style="display:none;">
           <div class="card-title"><span class="dot"></span> Resultado del scraper</div>
           <div class="import-result show info" id="movies-scraper-status">Iniciando…</div>
@@ -321,7 +324,7 @@
         <div class="card">
           <div class="card-title"><span class="dot"></span> Contenido VOD <span class="tag" id="movies-count">0</span></div>
           <div style="display:grid;grid-template-columns:48px 1fr 130px 1fr 1fr 36px;gap:8px;padding:0 12px 8px;font-size:0.65rem;font-weight:700;letter-spacing:0.07em;color:var(--muted2);text-transform:uppercase;">
-            <span>Emoji</span><span>Título</span><span>Categoría</span><span>URL</span><span>URL Carátula</span><span></span>
+            <span>Emoji</span><span class="sort-th" onclick="sortList('movies','name')">Título<i class="sort-arrow" id="sort-arrow-movies-name"></i></span><span class="sort-th" onclick="sortList('movies','cat')">Categoría<i class="sort-arrow" id="sort-arrow-movies-cat"></i></span><span class="sort-th" onclick="sortList('movies','url')">URL<i class="sort-arrow" id="sort-arrow-movies-url"></i></span><span>URL Carátula</span><span></span>
           </div>
           <div class="item-list" id="movies-list"></div>
           <button class="btn btn-secondary btn-sm" onclick="addRow('movies')" style="margin-top:4px;">➕ Agregar</button>
@@ -388,7 +391,7 @@
         <div class="card">
           <div class="card-title"><span class="dot"></span> Estaciones <span class="tag" id="radio-count">0</span></div>
           <div style="display:grid;grid-template-columns:48px 1fr 100px 1fr 36px;gap:8px;padding:0 12px 8px;font-size:0.65rem;font-weight:700;letter-spacing:0.07em;color:var(--muted2);text-transform:uppercase;">
-            <span>Emoji</span><span>Nombre</span><span>Género</span><span>URL Stream</span><span></span>
+            <span>Emoji</span><span class="sort-th" onclick="sortList('radio','name')">Nombre<i class="sort-arrow" id="sort-arrow-radio-name"></i></span><span class="sort-th" onclick="sortList('radio','genre')">Género<i class="sort-arrow" id="sort-arrow-radio-genre"></i></span><span class="sort-th" onclick="sortList('radio','url')">URL Stream<i class="sort-arrow" id="sort-arrow-radio-url"></i></span><span></span>
           </div>
           <div class="item-list" id="radio-list"></div>
           <button class="btn btn-secondary btn-sm" onclick="addRow('radio')" style="margin-top:4px;">➕ Agregar</button>
@@ -454,13 +457,39 @@
       <section class="page" id="page-users">
         <div class="page-header">
           <div><div class="page-title">Usuarios</div><div class="page-subtitle">Gestión de perfiles de acceso</div></div>
-          <div class="header-actions"><button class="btn btn-secondary" onclick="loadUsers()">🔄 Actualizar</button></div>
+          <div class="header-actions">
+            <button class="btn btn-primary" onclick="toggleNewUserForm()">➕ Nuevo usuario</button>
+            <button class="btn btn-secondary" onclick="loadUsers()">🔄 Actualizar</button>
+          </div>
         </div>
 
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:20px;">
           <div class="stat-card"><div class="stat-value" id="u-stat-pending" style="color:#f59e0b;">—</div><div class="stat-label">Pendientes</div></div>
           <div class="stat-card"><div class="stat-value" id="u-stat-active" style="color:#22c55e;">—</div><div class="stat-label">Activos</div></div>
           <div class="stat-card"><div class="stat-value" id="u-stat-blocked" style="color:#ef4444;">—</div><div class="stat-label">Bloqueados</div></div>
+        </div>
+
+        <div class="card" id="new-user-card" style="display:none;">
+          <div class="card-title"><span class="dot" style="background:#7c6af7;"></span> Crear usuario nuevo</div>
+          <p style="font-size:0.78rem;color:var(--muted);margin-bottom:14px;">Se crea ya <strong style="color:var(--text)">activo</strong> — no pasa por aprobación pendiente.</p>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;max-width:520px;">
+            <div class="form-group"><label>Usuario (handle de acceso)</label><input type="text" id="nu-username" placeholder="ej. juan" /></div>
+            <div class="form-group"><label>Nombre para mostrar</label><input type="text" id="nu-displayname" placeholder="opcional" /></div>
+            <div class="form-group"><label>PIN (4 dígitos)</label><input type="password" id="nu-pin" maxlength="4" inputmode="numeric" placeholder="••••" /></div>
+            <div class="form-group"><label>Máx. dispositivos</label><input type="number" id="nu-maxdevices" min="1" value="2" /></div>
+          </div>
+          <div style="margin:12px 0;">
+            <label style="display:block;font-size:0.78rem;color:var(--muted);margin-bottom:8px;">Color de avatar</label>
+            <div style="display:flex;align-items:center;gap:14px;">
+              <div id="nu-avatar-preview" style="width:46px;height:46px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:1rem;color:#fff;flex-shrink:0;">--</div>
+              <div id="nu-color-picker" style="display:flex;flex-wrap:wrap;gap:8px;max-width:460px;"></div>
+            </div>
+          </div>
+          <div style="display:flex;gap:10px;align-items:center;">
+            <button class="btn btn-primary" onclick="createUser()">✅ Crear usuario</button>
+            <button class="btn btn-secondary" onclick="toggleNewUserForm()">Cancelar</button>
+          </div>
+          <div class="import-result" id="nu-result" style="max-width:520px;margin-top:12px;"></div>
         </div>
 
         <div class="card">
@@ -588,20 +617,30 @@ function doLogout() {
 // Auto-login if token saved
 (async () => {
   if (!TOKEN) return;
-  const res = await fetch(`${API}/config`).catch(() => null);
+  const res = await fetch(`${API}/config`, { headers: { 'X-Admin-Token': TOKEN } }).catch(() => null);
   if (res?.ok) {
-    document.getElementById('login-screen').style.display = 'none';
-    document.getElementById('main-screen').style.display  = 'flex';
-    await loadCFG();
-    showPage('dashboard');
-  } else { TOKEN = ''; sessionStorage.removeItem('mytv-token'); }
+    try {
+      document.getElementById('login-screen').style.display = 'none';
+      document.getElementById('main-screen').style.display  = 'flex';
+      await loadCFG();
+      showPage('dashboard');
+      return;
+    } catch {}
+  }
+  TOKEN = ''; sessionStorage.removeItem('mytv-token');
+  document.getElementById('login-screen').style.display = 'flex';
+  document.getElementById('main-screen').style.display  = 'none';
 })();
 
 /* ══════════════════════════════════════════
    API HELPERS
    ══════════════════════════════════════════ */
 async function loadCFG() {
-  const res = await fetch(`${API}/config`);
+  const res = await fetch(`${API}/config`, { headers: { 'X-Admin-Token': TOKEN } });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `Error ${res.status} cargando config`);
+  }
   CFG = await res.json();
 }
 
@@ -779,6 +818,33 @@ function renderList(type) {
   });
 }
 
+/* ── Ordenamiento por columna (Nombre/Categoría-Género/URL) ── */
+const SORT_STATE = { livetv: { field: null, dir: 1 }, movies: { field: null, dir: 1 }, radio: { field: null, dir: 1 } };
+
+function updateSortArrows(type) {
+  const st = SORT_STATE[type];
+  document.querySelectorAll(`i[id^="sort-arrow-${type}-"]`).forEach(el => el.textContent = '');
+  if (st.field) {
+    const arrow = document.getElementById(`sort-arrow-${type}-${st.field}`);
+    if (arrow) arrow.textContent = st.dir === 1 ? '▲' : '▼';
+  }
+}
+
+function sortList(type, field) {
+  if (!CFG) return;
+  CFG[type] = getListFromDOM(type); // preservar ediciones en curso antes de reordenar
+  const st = SORT_STATE[type];
+  st.dir = (st.field === field) ? -st.dir : 1;
+  st.field = field;
+  CFG[type].sort((a, b) => {
+    const va = (a[field] || '').toString().toLowerCase();
+    const vb = (b[field] || '').toString().toLowerCase();
+    return va.localeCompare(vb, 'es') * st.dir;
+  });
+  renderList(type);
+  updateSortArrows(type);
+}
+
 function getListFromDOM(type) {
   const lc = LIST_CFG[type];
   return Array.from(document.querySelectorAll(`#${type}-list .item-row`)).map((row, i) => {
@@ -794,7 +860,7 @@ function getListFromDOM(type) {
 function addRow(type) {
   if (!CFG) return;
   CFG[type] = getListFromDOM(type);
-  CFG[type].push({ ...LIST_CFG[type].defaults });
+  CFG[type].push({ ...LIST_CFG[type].defaults, addedAt: Date.now() });
   renderList(type);
 }
 
@@ -894,10 +960,12 @@ function processM3U(text) {
 async function importM3U(mode) {
   if (!_m3uParsed.length || !CFG) return;
   const dest = document.querySelector('input[name="m3u-dest"]:checked').value;
+  const stamp = Date.now(); // mismo sello para todo el lote: un "reemplazar todo" hace que TODO el catálogo cuente como recién agregado
+  const stamped = _m3uParsed.map(item => ({ ...item, addedAt: stamp }));
   if (mode === 'replace') {
-    CFG[dest] = _m3uParsed;
+    CFG[dest] = stamped;
   } else {
-    CFG[dest] = [...(CFG[dest] || []), ..._m3uParsed];
+    CFG[dest] = [...(CFG[dest] || []), ...stamped];
   }
   try {
     await saveCFG();
@@ -1145,6 +1213,107 @@ async function radioM3UImport(mode) {
    USERS
    ══════════════════════════════════════════ */
 let _users = [];
+let _nuColor = 'purple';
+
+// Paleta profesional (iniciales sobre círculo de color, tipo Slack/Google) —
+// mismos nombres/colores que ya usa Launcher, para mantener consistencia visual.
+const NU_COLORS = {
+  purple: '#7c6af7', cyan: '#3ecfcf', orange: '#f59e0b', green: '#22c55e',
+  pink: '#ec4899', blue: '#3b82f6', red: '#ef4444', yellow: '#eab308',
+};
+
+function userInitials(u) {
+  const name = (u.displayName || u.username || '').trim();
+  if (!name) return '--';
+  const parts = name.split(/\s+/).filter(Boolean);
+  return parts.length > 1
+    ? (parts[0][0] + parts[1][0]).toUpperCase()
+    : name.slice(0, 2).toUpperCase();
+}
+
+function nuInitials() {
+  const name = (document.getElementById('nu-displayname').value.trim()
+             || document.getElementById('nu-username').value.trim());
+  if (!name) return '--';
+  const parts = name.split(/\s+/).filter(Boolean);
+  return parts.length > 1
+    ? (parts[0][0] + parts[1][0]).toUpperCase()
+    : name.slice(0, 2).toUpperCase();
+}
+
+function updateNuAvatarPreview() {
+  const el = document.getElementById('nu-avatar-preview');
+  el.textContent = nuInitials();
+  el.style.background = NU_COLORS[_nuColor];
+}
+
+function renderNuColorPicker() {
+  const box = document.getElementById('nu-color-picker');
+  box.innerHTML = Object.entries(NU_COLORS).map(([name, hex]) => `
+    <button type="button" onclick="selectNuColor(this,'${name}')" class="nu-color-btn" data-color="${name}" style="
+      width:32px;height:32px;border-radius:50%;background:${hex};cursor:pointer;
+      border:2px solid ${name===_nuColor?'#fff':'transparent'};
+      box-shadow:${name===_nuColor?'0 0 0 2px '+hex:'none'};"></button>`).join('');
+}
+
+function selectNuColor(btn, name) {
+  _nuColor = name;
+  document.querySelectorAll('.nu-color-btn').forEach(b => {
+    const hex = NU_COLORS[b.dataset.color];
+    const active = b.dataset.color === name;
+    b.style.border = active ? '2px solid #fff' : '2px solid transparent';
+    b.style.boxShadow = active ? `0 0 0 2px ${hex}` : 'none';
+  });
+  updateNuAvatarPreview();
+}
+
+function toggleNewUserForm() {
+  const card = document.getElementById('new-user-card');
+  const opening = card.style.display === 'none';
+  card.style.display = opening ? 'block' : 'none';
+  if (opening) {
+    document.getElementById('nu-username').value = '';
+    document.getElementById('nu-displayname').value = '';
+    document.getElementById('nu-pin').value = '';
+    document.getElementById('nu-maxdevices').value = 2;
+    document.getElementById('nu-result').className = 'import-result';
+    document.getElementById('nu-result').textContent = '';
+    _nuColor = 'purple';
+    renderNuColorPicker();
+    updateNuAvatarPreview();
+    document.getElementById('nu-username').oninput     = updateNuAvatarPreview;
+    document.getElementById('nu-displayname').oninput  = updateNuAvatarPreview;
+  }
+}
+
+async function createUser() {
+  const resultEl = document.getElementById('nu-result');
+  const username    = document.getElementById('nu-username').value.trim();
+  const displayName = document.getElementById('nu-displayname').value.trim();
+  const pin         = document.getElementById('nu-pin').value.trim();
+  const maxDevices  = document.getElementById('nu-maxdevices').value;
+
+  if (!username) { resultEl.className = 'import-result show error'; resultEl.textContent = '❌ El usuario es obligatorio'; return; }
+  if (!/^\d{4}$/.test(pin)) { resultEl.className = 'import-result show error'; resultEl.textContent = '❌ El PIN debe ser 4 dígitos'; return; }
+
+  try {
+    const r = await fetch(`${API}/admin/users/create`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Admin-Token': TOKEN },
+      body: JSON.stringify({ username, pin, displayName, avatarColor: _nuColor, maxDevices }),
+    });
+    const data = await r.json();
+    if (!data.ok) { resultEl.className = 'import-result show error'; resultEl.textContent = '❌ ' + (data.error || 'Error creando usuario'); return; }
+    resultEl.className = 'import-result show ok';
+    resultEl.textContent = `✅ Usuario "${username}" creado y activo`;
+    toast(`✅ Usuario "${username}" creado`);
+    await loadUsers();
+    setTimeout(() => toggleNewUserForm(), 900);
+  } catch (e) {
+    resultEl.className = 'import-result show error';
+    resultEl.textContent = '❌ Error de conexión: ' + e.message;
+  }
+}
 
 async function loadUsers() {
   try {
@@ -1175,24 +1344,52 @@ function renderUserList(containerId, users, actions) {
     el.innerHTML = '<div style="color:var(--muted);font-size:0.8rem;padding:8px 0;">Sin usuarios en esta categoría</div>';
     return;
   }
-  el.innerHTML = users.map(u => `
-    <div class="item-row" style="grid-template-columns:40px 1fr 120px 140px;margin-bottom:8px;">
-      <div style="font-size:1.4rem;text-align:center;">${esc(u.emoji)}</div>
+  el.innerHTML = users.map(u => {
+    const last = (u.loginHistory && u.loginHistory[0]) || null;
+    const lastStr = last
+      ? `${new Date(last.timestamp).toLocaleString('es-CR')} — ${esc(last.ip || '?')}${last.city ? ` (${esc(last.city)}, ${esc(last.country || '')})` : ''}`
+      : 'Nunca';
+    return `
+    <div class="item-row" style="grid-template-columns:40px 1fr 170px 160px;margin-bottom:8px;">
+      <div style="${u.avatarColor ? `width:36px;height:36px;border-radius:50%;background:${NU_COLORS[u.avatarColor]||'#7c6af7'};display:flex;align-items:center;justify-content:center;font-weight:700;font-size:0.8rem;color:#fff;margin:0 auto;` : 'font-size:1.4rem;text-align:center;'}">${u.avatarColor ? esc(userInitials(u)) : esc(u.emoji||'👤')}</div>
       <div>
-        <div style="font-weight:600;font-size:0.88rem;">${esc(u.username)}</div>
+        <div style="font-weight:600;font-size:0.88rem;">${esc(u.displayName || u.username)} <span style="color:var(--muted);font-weight:400;">(@${esc(u.username)})</span></div>
         <div style="font-size:0.72rem;color:var(--muted);">Registrado: ${new Date(u.createdAt).toLocaleDateString('es-CR')}</div>
+        <div style="font-size:0.72rem;color:var(--muted);">🕓 Último acceso: ${lastStr}</div>
       </div>
       <div style="font-size:0.72rem;color:var(--muted);">
         <div>🎨 ${esc(u.prefs?.wallpaper || 'default')}</div>
         <div>🕐 ${esc(u.prefs?.timeFormat || '24h')}</div>
+        <div>📱 Máx. dispositivos: ${u.maxDevices ?? 2}</div>
       </div>
       <div style="display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end;">
+        <button class="btn btn-secondary btn-sm" onclick="editUser('${u.id}','${esc(u.displayName || u.username)}',${u.maxDevices ?? 2})">✏️ Editar</button>
         ${actions.includes('approve')   ? `<button class="btn btn-success btn-sm" onclick="userAction('${u.id}','approve')">✅ Aprobar</button>` : ''}
         ${actions.includes('block')     ? `<button class="btn btn-danger btn-sm"  onclick="userAction('${u.id}','block')">🚫 Bloquear</button>` : ''}
         ${actions.includes('reset-pin') ? `<button class="btn btn-secondary btn-sm" onclick="userAction('${u.id}','reset-pin')">🔑 Reset PIN</button>` : ''}
         ${actions.includes('delete')    ? `<button class="btn btn-danger btn-sm"  onclick="userAction('${u.id}','delete')">🗑️</button>` : ''}
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
+}
+
+async function editUser(id, currentDisplayName, currentMaxDevices) {
+  const displayName = prompt('Nombre para mostrar en el sistema:', currentDisplayName);
+  if (displayName === null) return; // canceló
+  const maxDevicesStr = prompt('Máximo de dispositivos conectados simultáneamente:', currentMaxDevices);
+  if (maxDevicesStr === null) return;
+  const maxDevices = parseInt(maxDevicesStr, 10);
+  if (!Number.isFinite(maxDevices) || maxDevices < 1) { toast('❌ El máximo de dispositivos debe ser un número mayor a 0'); return; }
+
+  try {
+    const r = await fetch(`${API}/admin/users/${id}/update`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Admin-Token': TOKEN },
+      body: JSON.stringify({ displayName, maxDevices }),
+    });
+    const data = await r.json();
+    if (data.ok) { toast('✅ Usuario actualizado'); loadUsers(); }
+    else toast('❌ ' + (data.error || 'Error'));
+  } catch (e) { toast('❌ ' + e.message); }
 }
 
 async function userAction(id, action) {
@@ -1329,6 +1526,42 @@ function logLine(logEl, cls, text) {
 }
 
 /* ── Películas → TMDB ─────────────────────── */
+/* Rellena SOLO el backdrop de películas que ya fueron confirmadas con
+   TMDB antes de que este campo existiera (autoMetadataMovies() las
+   salta porque ya están tmdbConfirmed). Reusa la misma lógica de
+   coincidencia por título, pero no toca poster/descripción/año/etc —
+   esos ya están curados, esto solo completa el dato que faltaba. */
+async function fillMissingBackdrops() {
+  if (!CFG) return;
+  const movies = (CFG.movies || []).filter(m => m.tmdbConfirmed && !m.backdrop);
+  if (!movies.length) { toast('✅ Todas las películas confirmadas ya tienen backdrop'); return; }
+
+  const btn = document.getElementById('btn-fill-backdrops');
+  btn.disabled = true; btn.textContent = '⏳ Rellenando…';
+
+  let ok = 0, miss = 0;
+  const norm = s => (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'');
+
+  for (const m of movies) {
+    const title = m.name || m.title || '';
+    if (!title) continue;
+    try {
+      const r    = await fetch(`${API}/admin/fetch-metadata?title=${encodeURIComponent(title)}`, { headers:{'X-Admin-Token':TOKEN} });
+      const data = await r.json();
+      if (!data.ok || !data.results.length) { miss++; continue; }
+      const targetNorm = norm(title.replace(/\(\d{4}\)/,''));
+      let best = data.results.find(r => norm(r.title) === targetNorm || norm(r.original) === targetNorm);
+      if (!best) best = data.results[0];
+      const rd = await fetch(`${API}/admin/fetch-metadata-detail?tmdb_id=${best.tmdb_id}`, { headers:{'X-Admin-Token':TOKEN} });
+      const dd = await rd.json();
+      if (dd.ok && dd.result.backdrop) { m.backdrop = dd.result.backdrop; ok++; } else { miss++; }
+    } catch { miss++; }
+  }
+
+  btn.disabled = false; btn.textContent = '🖼️ Rellenar backdrops';
+  toast(`✅ ${ok} backdrop(s) agregados${miss ? `, ${miss} sin resultado` : ''} — recordá 💾 Guardar`);
+}
+
 async function autoMetadataMovies() {
   if (!CFG) return;
   const movies = CFG.movies || [];
@@ -1380,6 +1613,7 @@ async function autoMetadataMovies() {
 
       if (detail.description) m.description = detail.description;
       if (detail.poster)      m.poster      = detail.poster;
+      if (detail.backdrop)    m.backdrop    = detail.backdrop;
       if (detail.year)        m.year        = detail.year;
       if (detail.genre)       m.genre       = detail.genre;
       if (detail.duration)    m.duration    = detail.duration;
@@ -1477,6 +1711,7 @@ async function retryFailedMovie(idx) {
     m.name = newTitle; // se guarda el título corregido a mano
     if (detail.description) m.description = detail.description;
     if (detail.poster)      m.poster      = detail.poster;
+    if (detail.backdrop)    m.backdrop    = detail.backdrop;
     if (detail.year)        m.year        = detail.year;
     if (detail.genre)       m.genre       = detail.genre;
     if (detail.duration)    m.duration    = detail.duration;

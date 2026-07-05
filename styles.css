@@ -488,67 +488,12 @@ body::after {
   text-overflow: ellipsis;
 }
 
-/* Tarjeta de "Continuar viendo" (poster vertical + barra de progreso)
-   Fila deliberadamente más compacta que las demás — usa más columnas
-   (tarjetas más angostas → más bajas, proporción 2:3 intacta) para que
-   la sección no empuje el dock fuera de la pantalla en ventanas chicas. */
+/* "Continuar viendo" (Home) — ahora usa fila horizontal con flechas
+   (.nf-row-track-wrap) igual que las filas del tema Netflix. La tarjeta
+   en sí (.cw-card) se define más abajo, junto a .nf-card, para que el
+   diseño quede unificado entre Home y el tema Netflix. */
 #suggestions-continue-wrap .suggestions-label {
   margin-bottom: 6px;
-}
-#suggestions-continue {
-  grid-template-columns: repeat(18, 1fr);
-  gap: 8px;
-  padding: 2px 2px 10px;
-}
-.sugg-continue-card {
-  cursor: pointer;
-  border-radius: 6px;
-  border: 2px solid transparent;
-  transition: border-color 0.15s, transform 0.15s;
-  outline: none;
-  min-width: 0;
-  position: relative;
-}
-.sugg-continue-card:hover,
-.sugg-continue-card.focused {
-  border-color: #7c6af7;
-  transform: scale(1.1) translateY(-4px);
-  z-index: 2;
-  position: relative;
-  box-shadow: 0 0 0 2px rgba(124,106,247,0.4), 0 0 16px rgba(124,106,247,0.35);
-}
-.sugg-continue-card .sm-poster,
-.sugg-continue-card .sm-poster-fallback {
-  width: 100%;
-  aspect-ratio: 2/3;
-  border-radius: 5px;
-  object-fit: cover;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.3rem;
-  background: rgba(124,106,247,0.12);
-}
-.sugg-continue-progress {
-  height: 2px;
-  border-radius: 2px;
-  background: rgba(255,255,255,0.2);
-  margin-top: 3px;
-  overflow: hidden;
-}
-.sugg-continue-progress-fill {
-  height: 100%;
-  border-radius: 2px;
-  background: linear-gradient(90deg, #7c6af7, #3ecfcf);
-}
-.sugg-continue-card .sm-title {
-  font-size: 0.58rem;
-  color: var(--text-muted);
-  text-align: center;
-  margin-top: 3px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 /* Tarjeta de canal (logo horizontal) */
@@ -922,16 +867,23 @@ body::after {
 .tile-color-blue.focused,   .tile-color-blue:hover   { border-color: #3b82f6; box-shadow: 0 0 0 2px rgba(59,130,246,0.3),  0 0 32px rgba(59,130,246,0.3),  0 16px 36px rgba(0,0,0,0.5); }
 .tile-color-red.focused,    .tile-color-red:hover    { border-color: #ef4444; box-shadow: 0 0 0 2px rgba(239,68,68,0.3),   0 0 32px rgba(239,68,68,0.3),   0 16px 36px rgba(0,0,0,0.5); }
 
-/* Home footer hints */
+/* Home footer hints — solo tiene sentido en modo TV (control remoto).
+   En modo navegador (sin fullscreen real, sin user-agent de TV) se
+   oculta: el usuario ya puede scrollear libremente con mouse/trackpad
+   y no necesita la leyenda de teclas del remoto. Ver updateTvModeClass()
+   en app.js, que agrega/quita la clase .tv-mode en <body>. */
 .home-footer {
+  display: none;
   margin-top: 10px;
   font-size: 0.72rem;
   color: var(--text-muted);
   letter-spacing: 0.05em;
-  display: flex;
   align-items: center;
   justify-content: center;
   gap: 10px;
+}
+body.tv-mode .home-footer {
+  display: flex;
 }
 
 .hint-key {
@@ -1750,6 +1702,250 @@ input:checked + .toggle-slider::before {
 }
 
 /* ══════════════════════════════════════════════════════════════
+   MENÚ SUPERIOR — TEMA NETFLIX (persistente en Inicio/Películas/
+   Live TV/Radio). Reemplaza visualmente a .topbar-center (título)
+   mientras el tema Netflix está activo.
+   ══════════════════════════════════════════════════════════════ */
+body.theme-netflix .topbar { justify-content: flex-start; }
+body.theme-netflix .topbar-right { margin-left: auto; }
+body.theme-netflix .topbar-center { display: none; }
+
+.nf-topnav { display: none; align-items: center; gap: 26px; margin-left: 40px; }
+body.theme-netflix .nf-topnav { display: flex; }
+
+.nf-topnav-item {
+  background: none;
+  border: none;
+  font-family: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 6px 1px;
+  position: relative;
+  transition: color var(--transition-fast);
+}
+.nf-topnav-item:hover,
+.nf-topnav-item.active,
+.nf-topnav-item.focused { color: var(--text-primary); }
+.nf-topnav-item.active::after {
+  content: '';
+  position: absolute;
+  left: 0; right: 0; bottom: -9px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--accent-primary);
+}
+.nf-topnav-item.focused {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 4px;
+  border-radius: 4px;
+}
+
+.nf-topnav-more { position: relative; }
+.nf-topnav-caret { font-size: 0.6rem; margin-left: 3px; display: inline-block; }
+.nf-topnav-dropdown {
+  display: none;
+  flex-direction: column;
+  gap: 2px;
+  position: absolute;
+  top: calc(100% + 14px);
+  left: 0;
+  min-width: 190px;
+  padding: 8px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  box-shadow: 0 16px 40px rgba(0,0,0,0.55);
+  z-index: 50;
+}
+.nf-topnav-dropdown.open { display: flex; }
+.nf-topnav-more:hover .nf-topnav-dropdown { display: flex; }
+.nf-topnav-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 0.8rem;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+.nf-topnav-dropdown-item:hover,
+.nf-topnav-dropdown-item.focused { background: var(--bg-glass-hover); }
+.nf-topnav-dropdown-item .tn-icon { width: 18px; text-align: center; flex-shrink: 0; }
+
+/* ══════════════════════════════════════════════════════════════
+   HOME — TEMA NETFLIX (banner destacado + filas)
+   Alternativo a .home-default-view, activado vía body.theme-netflix
+   (mismo selector de tema que ya existe para Películas).
+   ══════════════════════════════════════════════════════════════ */
+.home-netflix-view { display: none; width: 100%; padding-bottom: 24px; }
+body.theme-netflix .home-netflix-view { display: block; }
+body.theme-netflix .home-default-view { display: none; }
+
+.home-hero-banner {
+  position: relative;
+  width: 100%;
+  height: clamp(280px, 42vh, 460px);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  margin-bottom: 28px;
+}
+.home-hero-bg {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center top;
+}
+/* Capa del backdrop real (TMDB), un <img> de verdad por encima del
+   blur de respaldo — así, si la URL falla, el onerror en JS la
+   elimina del DOM y queda visible el blur de abajo en vez de un
+   hueco roto. */
+.home-hero-bg-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center top;
+}
+/* Respaldo cuando la película no tiene backdrop real de TMDB: el
+   póster (vertical) desenfocado de fondo ambienta el banner sin
+   mostrar el recorte "crudo" que se ve raro a todo ancho. */
+.home-hero-bg-blur {
+  filter: blur(18px) brightness(0.55) saturate(1.3);
+  transform: scale(1.15);
+  background-position: center;
+}
+.home-hero-bg-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-surface);
+  font-size: 5rem;
+  opacity: 0.5;
+}
+/* Miniatura nítida del póster, solo cuando se usa el fondo desenfocado
+   (con backdrop real de TMDB no hace falta: la imagen ya es panorámica) */
+.home-hero-thumb {
+  position: absolute;
+  left: 24px;
+  top: 24px;
+  bottom: 24px;
+  width: 120px;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 12px 32px rgba(0,0,0,0.6);
+  background: rgba(255,255,255,0.05);
+}
+.home-hero-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.home-hero-banner.has-thumb .home-hero-info { left: 168px; }
+.home-hero-scrim {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(7,7,16,0) 35%, rgba(7,7,16,0.95) 100%);
+}
+.home-hero-info {
+  position: absolute;
+  left: 32px;
+  right: 32px;
+  bottom: 28px;
+}
+.home-hero-title {
+  font-size: clamp(1.4rem, 2.6vw, 2.1rem);
+  font-weight: 700;
+  color: var(--text-primary);
+  text-shadow: 0 2px 8px rgba(0,0,0,0.6);
+  margin-bottom: 8px;
+  max-width: 65%;
+}
+.home-hero-meta {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  margin-bottom: 16px;
+}
+.home-hero-buttons { display: flex; gap: 12px; }
+.home-hero-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 20px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+}
+.home-hero-btn-play { background: var(--text-primary); color: #10101a; }
+.home-hero-btn-info { background: rgba(255,255,255,0.14); color: var(--text-primary); backdrop-filter: blur(10px); }
+.home-hero-btn:hover,
+.home-hero-btn.focused {
+  transform: scale(1.05);
+  box-shadow: 0 0 0 2px var(--accent-glow);
+}
+
+/* Live TV / Apps del Home Netflix: logo centrado sin recortar, en vez
+   del recorte a sangre que usa .nf-card-poster para pósters de película */
+.nf-card-poster-contain {
+  width: 100%;
+  height: 195px;
+  object-fit: contain;
+  background: rgba(255,255,255,0.04);
+  padding: 18px;
+  display: block;
+}
+
+/* Radio del Home Netflix: tarjeta circular (disco), estilo propio ya
+   que .nf-card es rectangular (130x195, pensado para pósters) */
+.home-radio-tile {
+  flex: 0 0 auto;
+  width: 110px;
+  cursor: pointer;
+  text-align: center;
+}
+.home-radio-tile .home-radio-disc {
+  width: 110px;
+  height: 110px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.04);
+  border: 2px solid transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  font-size: 1.8rem;
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+.home-radio-tile .home-radio-disc img { width: 70%; height: 70%; object-fit: contain; }
+.home-radio-tile.focused .home-radio-disc,
+.home-radio-tile:hover .home-radio-disc {
+  transform: scale(1.08);
+  border-color: var(--accent, #7c6af7);
+}
+.home-radio-tile .home-radio-name {
+  margin-top: 8px;
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Apps como fila horizontal dentro del tema Netflix (mismas .app-tile
+   del dock, solo cambia el contenedor de grid a fila con scroll) */
+.home-netflix-view .nf-row-track .app-tile { flex-shrink: 0; }
+
+/* ══════════════════════════════════════════════════════════════
    TEMA NETFLIX — filas horizontales por categoría (Películas)
    Activado vía .theme-netflix en <body> desde admin (Sistema → Tema)
    ══════════════════════════════════════════════════════════════ */
@@ -1789,7 +1985,7 @@ input:checked + .toggle-slider::before {
   overflow-x: auto;
   overflow-y: visible;
   scroll-behavior: smooth;
-  padding: 6px 16px 14px;
+  padding: 16px 16px 14px;
   scrollbar-width: none;
 }
 .nf-row-track::-webkit-scrollbar { display: none; }
@@ -1890,6 +2086,123 @@ input:checked + .toggle-slider::before {
   overflow: hidden;
   text-overflow: ellipsis;
   background: #1a1a24;
+}
+
+/* ── "Continuar viendo" — tarjeta panorámica compartida ──────────────
+   Se combina con .sugg-continue-card (Home) o .nf-card (tema Netflix)
+   para heredar su comportamiento de foco/hover/clic ya existente, y
+   redefine aquí tamaño + recorte panorámico del poster (no hay imagen
+   backdrop horizontal en los datos: se recorta el poster centrado).
+   Tarjeta compacta (gana espacio, varias por fila con scroll), título
+   superpuesto sobre degradado, barra de progreso a todo el ancho del
+   borde inferior con color rotativo por tarjeta (--cw-accent), botón
+   de play transparente que aparece en hover/foco (igual que Netflix).
+   Declarada después de .nf-card para ganar la cascada sin !important. */
+.cw-card {
+  width: clamp(160px, 16vw, 240px);
+  flex: 1 1 clamp(160px, 16vw, 240px);
+  min-width: 160px;
+  max-width: 240px;
+  height: auto;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #1a1a24;
+  contain-intrinsic-size: 220px 124px;
+}
+.cw-frame {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  background: rgba(124,106,247,0.15);
+}
+.cw-frame img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  display: block;
+}
+.cw-frame-fallback {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.8rem;
+  background: rgba(124,106,247,0.12);
+}
+.cw-scrim {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 60%;
+  background: linear-gradient(to top, rgba(0,0,0,0.8), rgba(0,0,0,0));
+  pointer-events: none;
+}
+.cw-play {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(0.85);
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.16);
+  border: 1.5px solid rgba(255,255,255,0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  pointer-events: none;
+}
+.cw-play svg { display: block; }
+.cw-card:hover .cw-play,
+.cw-card.focused .cw-play {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+}
+.cw-title {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 10px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #ffffff;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.6);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cw-progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 4px;
+  background: rgba(255,255,255,0.15);
+}
+.cw-progress-fill {
+  height: 100%;
+  background: var(--cw-accent, #7c6af7);
+}
+/* Home: cursor + hover/focus (mismo patrón que .nf-card:hover en el tema Netflix) */
+.sugg-continue-card {
+  cursor: pointer;
+  border: 2px solid transparent;
+  outline: none;
+  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.sugg-continue-card:hover,
+.sugg-continue-card.focused {
+  transform: scale(1.06);
+  border-color: var(--accent, #7c6af7);
+  box-shadow: 0 6px 24px rgba(0,0,0,0.6);
+  z-index: 2;
+  position: relative;
 }
 
 /* ── Modal de detalle — tema Netflix ────────────────────────────

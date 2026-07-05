@@ -6,6 +6,58 @@
 
 const API = '/api';
 
+/* ══════════════════════════════════════════════════════════════
+   AUTENTICACIÓN — helpers para mandar el token de sesión (admin o
+   usuario) en cada llamada a la API. Sin esto, /api/config, los
+   proxies de streaming y /api/progress quedan cerrados (403).
+   ══════════════════════════════════════════════════════════════ */
+function getAuthHeaders() {
+  if (typeof _currentUser === 'undefined' || !_currentUser) return {};
+  if (_currentUser.isAdmin && _currentUser.adminToken) return { 'X-Admin-Token': _currentUser.adminToken };
+  if (_currentUser.token) return { 'X-User-Token': _currentUser.token };
+  return {};
+}
+// Para URLs que se usan como src de <video>/hls.js (no pueden mandar
+// headers custom) — el mismo token, pero como query param ?token=.
+function getAuthTokenParam() {
+  if (typeof _currentUser === 'undefined' || !_currentUser) return '';
+  if (_currentUser.isAdmin && _currentUser.adminToken) return _currentUser.adminToken;
+  if (_currentUser.token) return _currentUser.token;
+  return '';
+}
+
+// Paleta rotativa para la barra de progreso de "Continuar viendo"
+// (compartida entre Home y el tema Netflix de Películas).
+const CW_ACCENTS = ['#7c6af7', '#3ecfcf', '#f5b942', '#e55353', '#38b48b', '#64b5f6'];
+
+/* ══════════════════════════════════════════════════════════════
+   MODO TV vs MODO NAVEGADOR
+   ══════════════════════════════════════════════════════════════
+   Un TV Box (Android TV/T95, Tizen, webOS, etc.) siempre se trata
+   como modo TV vía user-agent. Cualquier otro dispositivo (desktop,
+   móvil) se trata como modo TV solo mientras esté en pantalla
+   completa real (Fullscreen API) — que es cuando tiene sentido
+   depender del salto de foco por flechas y mostrar la barra de
+   hints de control remoto ("↔ Navegar · Enter Abrir · Esc Volver").
+   Fuera de fullscreen, el scroll normal con mouse/trackpad ya
+   funciona (overflow-y:auto en .screen) y la barra de hints se
+   oculta vía CSS (body sin la clase .tv-mode). */
+const UA_IS_TV = /tv|smart-tv|googletv|androidtv|webos|tizen|netcast|viera|hbbtv/i.test(navigator.userAgent);
+
+function isFullscreenActive() {
+  return !!(document.fullscreenElement || document.webkitFullscreenElement);
+}
+
+function updateTvModeClass() {
+  document.body.classList.toggle('tv-mode', UA_IS_TV || isFullscreenActive());
+}
+
+document.addEventListener('DOMContentLoaded', updateTvModeClass);
+document.addEventListener('fullscreenchange', updateTvModeClass);
+document.addEventListener('webkitfullscreenchange', updateTvModeClass);
+// Por si boot() corre antes de DOMContentLoaded (acceso directo sin login)
+updateTvModeClass();
+
 /* ── DEFAULT APPS (fallback si el servidor no responde) ─────── */
 const DEFAULT_APPS = [
   { id:'livetv',   label:'Live TV',       sublabel:'Canales en vivo', emoji:'📺', type:'internal', screen:'livetv',   color:'cyan',   badge:'LIVE'  },
@@ -52,7 +104,7 @@ async function fetchProgress() {
   const username = getUsername();
   if (!username) { state.progress = []; return; }
   try {
-    const res = await fetch(`${API}/progress/${encodeURIComponent(username)}`);
+    const res = await fetch(`${API}/progress/${encodeURIComponent(username)}`, { headers: getAuthHeaders() });
     if (!res.ok) throw new Error('Server error');
     const data = await res.json();
     state.progress = data.progress || [];
@@ -66,7 +118,7 @@ function saveProgressToServer(movieName, url, position, duration) {
   if (!username || !movieName || !isFinite(duration) || duration <= 0) return;
   fetch(`${API}/progress`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
     body: JSON.stringify({ username, movieName, url: url || '', position, duration }),
   }).catch(() => {});
 }
@@ -85,13 +137,17 @@ function findMovieByName(name) {
    ══════════════════════════════════════════════════════════════ */
 async function loadConfig() {
   try {
-    const res = await fetch(`${API}/config`);
+    const res = await fetch(`${API}/config`, { cache: 'no-store', headers: getAuthHeaders() });
     if (!res.ok) throw new Error('Server error');
     const cfg = await res.json();
     applyConfig(cfg);
   } catch {
-    // Fallback: use defaults so the app still works offline
-    applyConfig({});
+    // Sin respuesta del servidor — no forzar tema clásico por un fallo
+    // transitorio; se mantiene el último tema conocido (localStorage)
+    // hasta que startThemePolling() logre reconectar.
+    let cachedTheme = 'default';
+    try { cachedTheme = localStorage.getItem('mythos-theme') || 'default'; } catch (e) { /* sin storage */ }
+    applyConfig({ theme: cachedTheme });
   }
 }
 
@@ -107,6 +163,123 @@ function applyConfig(cfg) {
   state.movies       = groupMovies(cfg.movies || []);
   state.radio        = cfg.radio        || [];
   applyTheme(cfg.theme || 'default');
+  renderNfTopnav();
+}
+
+/* ══════════════════════════════════════════════════════════════
+   MENÚ SUPERIOR — TEMA NETFLIX (persistente: vive en <header>,
+   fuera de .screen, así que no se destruye al navegar entre
+   Inicio/Películas/Live TV/Radio). Se arma a partir del dock
+   configurado en admin: Inicio + las apps con screen 'movies' /
+   'livetv' (o alias 'iptv') / 'radio' quedan visibles siempre;
+   el resto (YouTube, Plex, Configuración, Panel Admin, etc.) va
+   agrupado en el desplegable "Más".
+   ══════════════════════════════════════════════════════════════ */
+function renderNfTopnav() {
+  const nav = document.getElementById('nf-topnav');
+  if (!nav) return;
+  const apps = state.apps || [];
+  const isLiveTv = (a) => a.screen === 'livetv' || a.screen === 'iptv';
+  const primary = [
+    apps.find(a => a.screen === 'movies'),
+    apps.find(isLiveTv),
+    apps.find(a => a.screen === 'radio'),
+  ].filter(Boolean);
+  const rest = apps.filter(a => !primary.includes(a));
+
+  nav.innerHTML = '';
+
+  const homeBtn = document.createElement('button');
+  homeBtn.type = 'button';
+  homeBtn.className = 'nf-topnav-item';
+  homeBtn.dataset.nfNav = 'home';
+  homeBtn.textContent = 'Inicio';
+  nav.appendChild(homeBtn);
+
+  // Cada botón guarda la app en una propiedad del propio elemento
+  // (btn._nfApp), no un índice de array — así el clic siempre abre
+  // exactamente la app que se ve en el botón, sin depender de que
+  // state.apps mantenga el mismo orden entre el render y el clic.
+  function makeAppBtn(a, isDropdown) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = isDropdown ? 'nf-topnav-dropdown-item' : 'nf-topnav-item';
+    btn.dataset.nfApp = '1';
+    btn._nfApp = a;
+    if (isDropdown) {
+      const icon = document.createElement('span');
+      icon.className = 'tn-icon';
+      icon.textContent = a.emoji || '🚀';
+      btn.appendChild(icon);
+      btn.appendChild(document.createTextNode(a.label));
+    } else {
+      btn.textContent = a.label;
+    }
+    return btn;
+  }
+
+  primary.forEach(a => nav.appendChild(makeAppBtn(a, false)));
+
+  if (rest.length) {
+    const moreWrap = document.createElement('div');
+    moreWrap.className = 'nf-topnav-more';
+    moreWrap.id = 'nf-topnav-more';
+    const moreBtn = document.createElement('button');
+    moreBtn.type = 'button';
+    moreBtn.className = 'nf-topnav-item nf-topnav-more-btn';
+    moreBtn.id = 'nf-topnav-more-btn';
+    moreBtn.innerHTML = 'Más <span class="nf-topnav-caret">▾</span>';
+    moreWrap.appendChild(moreBtn);
+    const dropdown = document.createElement('div');
+    dropdown.className = 'nf-topnav-dropdown';
+    dropdown.id = 'nf-topnav-dropdown';
+    rest.forEach(a => dropdown.appendChild(makeAppBtn(a, true)));
+    moreWrap.appendChild(dropdown);
+    nav.appendChild(moreWrap);
+  }
+
+  // .onclick (no addEventListener) para ser idempotente entre re-renders
+  nav.onclick = (e) => {
+    if (e.target.closest('[data-nf-nav="home"]')) { navigateTo('home', 'Inicio'); return; }
+    if (e.target.closest('#nf-topnav-more-btn')) {
+      document.getElementById('nf-topnav-dropdown')?.classList.toggle('open');
+      return;
+    }
+    const appBtn = e.target.closest('[data-nf-app]');
+    if (appBtn && appBtn._nfApp) {
+      document.getElementById('nf-topnav-dropdown')?.classList.remove('open');
+      launchApp(appBtn._nfApp);
+    }
+  };
+
+  // Cerrar "Más" al hacer clic afuera — listener global, se conecta una sola vez
+  if (!window._nfTopnavOutsideClickWired) {
+    window._nfTopnavOutsideClickWired = true;
+    document.addEventListener('click', (e) => {
+      const more = document.getElementById('nf-topnav-more');
+      if (more && !more.contains(e.target)) {
+        document.getElementById('nf-topnav-dropdown')?.classList.remove('open');
+      }
+    });
+  }
+
+  updateNfTopnavActive();
+}
+
+function updateNfTopnavActive() {
+  const nav = document.getElementById('nf-topnav');
+  if (!nav) return;
+  nav.querySelectorAll('.nf-topnav-item').forEach(el => el.classList.remove('active'));
+  if (state.currentScreen === 'home') {
+    nav.querySelector('[data-nf-nav="home"]')?.classList.add('active');
+  } else if (state.currentScreen === 'app') {
+    nav.querySelectorAll('[data-nf-app]').forEach(btn => {
+      const a = btn._nfApp;
+      if (a && (a.screen === state._currentApp || (state._currentApp === 'livetv' && a.screen === 'iptv'))) {
+        btn.classList.add('active');
+      }
+    });
+  }
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -121,12 +294,17 @@ function applyTheme(theme) {
   const changed = state.theme !== theme;
   state.theme = theme;
   document.body.classList.toggle('theme-netflix', theme === 'netflix');
+  try { localStorage.setItem('mythos-theme', theme); } catch (e) { /* ignorar si no hay storage */ }
   // Si el tema cambió mientras el usuario ya estaba dentro de una
   // pantalla de categoría, la re-renderizamos al instante.
   if (changed) rerenderCurrentScreenForTheme();
 }
 
 function rerenderCurrentScreenForTheme() {
+  if (state.currentScreen === 'home') {
+    if (state.theme === 'netflix') renderHomeNetflix();
+    return; // volviendo a 'default' no hace falta re-render: home-default-view ya está intacto
+  }
   if (state.currentScreen !== 'app') return;
   const reopen = { movies: openMovies, livetv: openLiveTV, radio: openRadio }[state._currentApp];
   if (reopen) reopen();
@@ -140,7 +318,7 @@ function rerenderCurrentScreenForTheme() {
 function startThemePolling() {
   setInterval(async () => {
     try {
-      const res = await fetch(`${API}/config`);
+      const res = await fetch(`${API}/config`, { cache: 'no-store', headers: getAuthHeaders() });
       if (!res.ok) return;
       const cfg = await res.json();
       applyTheme(cfg.theme || 'default');
@@ -178,6 +356,7 @@ function groupMovies(rawMovies) {
     }
     // Heredar metadata si el grupo aún no la tiene
     if (!group.poster  && m.poster)      group.poster      = m.poster;
+    if (!group.backdrop && m.backdrop)   group.backdrop    = m.backdrop;
     if (!group.description && m.description) group.description = m.description;
     if (!group.year    && m.year)        group.year        = m.year;
     if (!group.genre   && m.genre)       group.genre       = m.genre;
@@ -243,6 +422,7 @@ function initUI() {
   injectAdminTile();   // añade tile de admin al dock si corresponde
   renderAppGrid();
   renderSuggestions();
+  if (state.theme === 'netflix') renderHomeNetflix();
   initClock();
   initRemoteNav();
   initFocusGlow();
@@ -319,7 +499,8 @@ function initClock() {
     // Saludo según hora local del usuario
     const h = parseInt(now.toLocaleString('es-CR', { timeZone: tz, hour: 'numeric', hour12: false }));
     const g = h < 6 ? 'Buenas noches' : h < 12 ? 'Buenos días' : h < 19 ? 'Buenas tardes' : 'Buenas noches';
-    const username = (_currentUser && _currentUser.username) ? `, ${_currentUser.username}` : '';
+    const shownName = _currentUser ? (_currentUser.displayName || _currentUser.username) : null;
+    const username = shownName ? `, ${shownName}` : '';
     const el = document.getElementById('home-greeting');
     if (el) el.textContent = g + username;
   }
@@ -333,7 +514,13 @@ function applySettings() {
   const prefs = (_currentUser && _currentUser.prefs) ? _currentUser.prefs : {};
   const wallpaper = prefs.wallpaper || state.wallpaper || 'default';
 
-  document.body.className = '';
+  // IMPORTANTE: no usar `document.body.className = ''` — eso borraba
+  // TODAS las clases del body (theme-netflix, tv-mode, etc.), no solo
+  // las de fondo de pantalla que maneja esta función. Se remueven
+  // puntualmente solo las clases wallpaper-* anteriores.
+  [...document.body.classList].forEach(cls => {
+    if (cls.startsWith('wallpaper-')) document.body.classList.remove(cls);
+  });
   if (wallpaper && wallpaper !== 'default')
     document.body.classList.add(`wallpaper-${wallpaper}`);
   document.body.classList.toggle('no-glass', !state.glassEnabled);
@@ -484,6 +671,13 @@ function handleHomeKey(key) {
     return;
   }
 
+  // Tema Netflix: navegación por filas independiente del sistema de
+  // zonas clásico (dock/movies/livetv/continue) — ver handleHomeNetflixKey.
+  if (document.body.classList.contains('theme-netflix')) {
+    handleHomeNetflixKey(key);
+    return;
+  }
+
   const tiles = getTiles();
 
   // focusZone: 'dock' | 'movies' | 'livetv' | 'continue'
@@ -539,6 +733,373 @@ function handleHomeKey(key) {
 }
 
 /* ══════════════════════════════════════════════════════════════
+   HOME — TEMA NETFLIX (banner destacado + filas)
+   Activado vía body.theme-netflix (mismo selector de tema que ya
+   existe para Películas). #home-netflix-view es un contenedor
+   alternativo a #home-default-view (ver CSS: solo uno de los dos
+   está visible a la vez). Se reconstruye por completo cada vez que
+   se llama — el banner destacado se re-sortea al azar en cada
+   entrada a Inicio (navigateTo), no solo una vez al bootear.
+   ══════════════════════════════════════════════════════════════ */
+function playRadioFromHome(station) {
+  const idx = state.radio.indexOf(station);
+  openRadio();
+  if (idx >= 0) { selectStation(idx); toggleRadioPlay(); }
+}
+
+function homeNfPosterCard(rowType, idx, imgUrl, fallbackEmoji, title, contain) {
+  const img = imgUrl
+    ? `<img class="${contain ? 'nf-card-poster-contain' : 'nf-card-poster'}" src="${imgUrl}" alt="" data-fallback="${fallbackEmoji || '🎬'}" onerror="handleImgError(this)" />`
+    : `<div class="nf-card-fallback">${fallbackEmoji || '🎬'}</div>`;
+  return `
+    <div class="nf-card" tabindex="-1" data-row-type="${rowType}" data-idx="${idx}">
+      ${img}
+      <div class="nf-card-title">${title || ''}</div>
+    </div>`;
+}
+
+function homeNfMoreCard(rowType) {
+  return `
+    <div class="nf-card" tabindex="-1" data-row-type="more-${rowType}" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;background:rgba(255,255,255,0.03);border:1px dashed rgba(255,255,255,0.25);border-radius:8px;">
+      <div style="font-size:1.8rem;opacity:0.85;">➕</div>
+      <div style="font-size:0.8rem;font-weight:600;color:var(--text-primary);">Ver más</div>
+    </div>`;
+}
+
+function homeNfRowHtml(rIdx, title, accent, innerHtml) {
+  return `
+    <div class="nf-row" data-row="${rIdx}">
+      <div class="nf-row-title"><span class="nf-row-accent" style="background:${accent}"></span>${title}</div>
+      <div class="nf-row-track-wrap">
+        <button type="button" class="nf-row-arrow nf-arrow-left nf-arrow-hidden" aria-label="Anterior">&#8249;</button>
+        <div class="nf-row-track">${innerHtml}</div>
+        <button type="button" class="nf-row-arrow nf-arrow-right nf-arrow-hidden" aria-label="Siguiente">&#8250;</button>
+      </div>
+    </div>`;
+}
+
+function renderHomeNetflix() {
+  const root = document.getElementById('home-netflix-view');
+  if (!root) return;
+
+  const movies = state.movies || [];
+  const livetv = state.livetv || [];
+  const radio  = state.radio  || [];
+
+  /* Banner destacado — solo películas (nunca Live TV/Radio). Usa el
+     backdrop real de TMDB (horizontal, admin.html → auto-metadata) si
+     la película lo tiene; si no, cae al póster desenfocado de fondo
+     + una miniatura nítida del póster al costado (no hay backdrop
+     real para películas sin match de TMDB / agregadas manualmente). */
+  const heroPool = movies.filter(m => m.poster || m.backdrop);
+  const heroItem = heroPool.length ? heroPool[Math.floor(Math.random() * heroPool.length)] : null;
+  const hero = heroItem ? { type: 'movie', item: heroItem } : null;
+  state._homeNfHero = hero;
+
+  const hasBackdrop = hero && hero.item.backdrop;
+  const heroBgHtml = !hero ? '' : hasBackdrop
+    ? `<div class="home-hero-bg" style="background-image:url('${hero.item.backdrop}');"></div>`
+    : hero.item.poster
+      ? `<div class="home-hero-bg home-hero-bg-blur" style="background-image:url('${hero.item.poster}');"></div>`
+      : `<div class="home-hero-bg home-hero-bg-fallback">${hero.item.emoji || '🎬'}</div>`;
+  const heroThumbHtml = (!hero || hasBackdrop || !hero.item.poster) ? '' : `
+    <div class="home-hero-thumb"><img src="${hero.item.poster}" alt="" onerror="this.parentElement.style.display='none'" /></div>`;
+
+  const heroHtml = !hero ? '' : `
+    <div class="home-hero-banner${heroThumbHtml ? ' has-thumb' : ''}">
+      ${heroBgHtml}
+      ${heroThumbHtml}
+      <div class="home-hero-scrim"></div>
+      <div class="home-hero-info">
+        <div class="home-hero-title">${hero.item.name || hero.item.title || ''}</div>
+        <div class="home-hero-meta">${[hero.item.year, hero.item.genre, hero.item.duration].filter(Boolean).join(' · ') || 'Película'}</div>
+        <div class="home-hero-buttons">
+          <button type="button" class="home-hero-btn home-hero-btn-play" id="home-hero-play" tabindex="-1">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg> Reproducir
+          </button>
+          <button type="button" class="home-hero-btn home-hero-btn-info" id="home-hero-info" tabindex="-1">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg> Más información
+          </button>
+        </div>
+      </div>
+    </div>`;
+
+  /* Continuar viendo — mismo criterio que el resto de la app */
+  const continueItems = (state.progress || [])
+    .map(p => ({ p, m: findMovieByName(p.movieName) }))
+    .filter(x => x.m)
+    .slice(0, 10);
+
+  const HOME_ROW_CAP = 10;
+
+  /* Nuevo en MythOS TV — películas con sello addedAt (agregado desde admin.html) */
+  const newItemsAll = movies
+    .filter(m => !!m.addedAt)
+    .sort((a, b) => b.addedAt - a.addedAt);
+  const newItems = newItemsAll.slice(0, HOME_ROW_CAP);
+
+  const moviesAll = shuffle(movies);
+  const livetvAll = shuffle(livetv);
+  const radioAll  = shuffle(radio);
+  const moviesRow = moviesAll.slice(0, HOME_ROW_CAP);
+  const livetvRow = livetvAll.slice(0, HOME_ROW_CAP);
+  const radioRow  = radioAll.slice(0, HOME_ROW_CAP);
+
+  state._homeNfData = { continueItems, newItems, moviesRow, livetvRow, radioRow, newItemsAll };
+
+  let rIdx = 0;
+  const rowsHtml = [];
+
+  if (continueItems.length) {
+    const inner = continueItems.map(({ p, m }, i) => {
+      const pct = p.duration > 0 ? Math.min(100, Math.round((p.position / p.duration) * 100)) : 0;
+      const accent = CW_ACCENTS[i % CW_ACCENTS.length];
+      const frameHtml = m.poster
+        ? `<img src="${m.poster}" alt="" data-fallback="${m.emoji || '🎬'}" onerror="handleImgError(this)" />`
+        : `<div class="cw-frame-fallback">${m.emoji || '🎬'}</div>`;
+      return `
+        <div class="nf-card cw-card" tabindex="-1" data-row-type="continue" data-idx="${i}">
+          <div class="cw-frame" style="--cw-accent:${accent}">
+            ${frameHtml}
+            <div class="cw-scrim"></div>
+            <div class="cw-play"><svg width="16" height="16" viewBox="0 0 24 24" fill="#fff"><polygon points="5,3 19,12 5,21"/></svg></div>
+            <div class="cw-title">${m.name || m.title || ''}</div>
+            <div class="cw-progress"><div class="cw-progress-fill" style="width:${pct}%"></div></div>
+          </div>
+        </div>`;
+    }).join('');
+    rowsHtml.push(homeNfRowHtml(rIdx++, 'Continuar viendo', '#ffffff', inner));
+  }
+
+  if (newItems.length) {
+    const inner = newItems.map((m, i) =>
+      homeNfPosterCard('new', i, m.poster, m.emoji, m.name || m.title, false)).join('')
+      + (newItemsAll.length > HOME_ROW_CAP ? homeNfMoreCard('new') : '');
+    rowsHtml.push(homeNfRowHtml(rIdx++, 'Nuevo en MythOS TV', '#22c55e', inner));
+  }
+
+  if (moviesRow.length) {
+    const inner = moviesRow.map((m, i) =>
+      homeNfPosterCard('movies', i, m.poster, m.emoji, m.name || m.title, false)).join('')
+      + (movies.length > HOME_ROW_CAP ? homeNfMoreCard('movies') : '');
+    rowsHtml.push(homeNfRowHtml(rIdx++, 'Películas', '#D85A30', inner));
+  }
+
+  if (livetvRow.length) {
+    const inner = livetvRow.map((c, i) =>
+      homeNfPosterCard('livetv', i, c.logo, c.emoji || '📺', c.name, true)).join('')
+      + (livetv.length > HOME_ROW_CAP ? homeNfMoreCard('livetv') : '');
+    rowsHtml.push(homeNfRowHtml(rIdx++, 'Live TV', '#378ADD', inner));
+  }
+
+  if (radioRow.length) {
+    const inner = radioRow.map((s, i) => `
+      <div class="home-radio-tile" tabindex="-1" data-row-type="radio" data-idx="${i}">
+        <div class="home-radio-disc">
+          ${s.logo
+            ? `<img src="${s.logo}" alt="" data-fallback="${s.emoji || '📻'}" onerror="handleImgError(this)" />`
+            : (s.emoji || '📻')}
+        </div>
+        <div class="home-radio-name">${s.name || ''}</div>
+      </div>`).join('')
+      + (radio.length > HOME_ROW_CAP ? `
+      <div class="home-radio-tile" tabindex="-1" data-row-type="more-radio">
+        <div class="home-radio-disc" style="border:1px dashed rgba(255,255,255,0.25);">➕</div>
+        <div class="home-radio-name">Ver más</div>
+      </div>` : '');
+    rowsHtml.push(homeNfRowHtml(rIdx++, 'Radio', '#993556', inner));
+  }
+
+  root.innerHTML = heroHtml + `<div class="nf-rows">${rowsHtml.join('')}</div>`;
+
+  // Wiring de clics — un solo listener delegado, .onclick para ser
+  // idempotente entre re-renders (igual criterio que wireRowArrows).
+  root.onclick = (e) => {
+    const card = e.target.closest('[data-row-type]');
+    if (!card) return;
+    const { continueItems, newItems, moviesRow, livetvRow, radioRow, newItemsAll } = state._homeNfData;
+    const idx = parseInt(card.dataset.idx, 10);
+    switch (card.dataset.rowType) {
+      case 'continue':    { const m = continueItems[idx]?.m; if (m) openDetailModal('movie', m); break; }
+      case 'new':         { const m = newItems[idx];         if (m) openDetailModal('movie', m); break; }
+      case 'movies':      { const m = moviesRow[idx];        if (m) openDetailModal('movie', m); break; }
+      case 'livetv':      { const c = livetvRow[idx];        if (c) openDetailModal('livetv', c); break; }
+      case 'radio':       { const s = radioRow[idx];         if (s) playRadioFromHome(s); break; }
+      case 'more-new':    openNewMoviesView(newItemsAll); break;
+      case 'more-movies': openMovies(); break;
+      case 'more-livetv': openLiveTV(); break;
+      case 'more-radio':  openRadio(); break;
+    }
+  };
+
+  const heroPlayBtn = document.getElementById('home-hero-play');
+  const heroInfoBtn = document.getElementById('home-hero-info');
+  if (heroPlayBtn) heroPlayBtn.onclick = () => {
+    const h = state._homeNfHero;
+    if (!h) return;
+    if (h.type === 'movie') {
+      const urls = (h.item.urls && h.item.urls.length) ? h.item.urls : [h.item.url];
+      const progress = getMovieProgress(h.item.name || h.item.title || '');
+      playMovieWithFallback(urls, h.item.name || h.item.title || '', progress ? progress.position : 0);
+    } else {
+      playStream(h.item.url, h.item.name || '');
+    }
+  };
+  if (heroInfoBtn) heroInfoBtn.onclick = () => {
+    const h = state._homeNfHero;
+    if (h) openDetailModal(h.type, h.item);
+  };
+
+  root.querySelectorAll('.nf-row-track-wrap').forEach(wireRowArrows);
+
+  // Foco inicial: banner (botón Reproducir) si existe, si no la primera fila
+  state._homeNfRow = hero ? -1 : 0;
+  state._homeNfCol = 0;
+  state._homeNfHeroBtn = 'play';
+  state._homeNfTopIdx = 0;
+  state._homeNfDropdownIdx = -1;
+  if (hero) updateHomeHeroFocus();
+  else focusHomeNf(0, 0);
+}
+
+/* ── Navegación remota del Home en tema Netflix — menú superior +
+   banner + filas. Independiente del sistema de zonas del tema
+   clásico (ver handleHomeKey). state._homeNfRow: -2 = menú
+   superior, -1 = banner, 0..N = filas. El menú superior vive en
+   <header> (persistente entre pantallas) pero solo es alcanzable
+   por control remoto desde Inicio — ver aviso en el chat. */
+function getHomeNfRows() {
+  return [...document.querySelectorAll('#home-netflix-view .nf-row-track')];
+}
+function getHomeNfCards(rowEl) {
+  return rowEl ? [...rowEl.querySelectorAll('.nf-card, .app-tile, .home-radio-tile')] : [];
+}
+function updateHomeHeroFocus() {
+  const playBtn = document.getElementById('home-hero-play');
+  const infoBtn = document.getElementById('home-hero-info');
+  if (playBtn) playBtn.classList.toggle('focused', state._homeNfHeroBtn === 'play');
+  if (infoBtn) infoBtn.classList.toggle('focused', state._homeNfHeroBtn === 'info');
+}
+function focusHomeNf(row, col) {
+  const rows = getHomeNfRows();
+  if (!rows.length) return;
+  row = Math.max(0, Math.min(row, rows.length - 1));
+  const cards = getHomeNfCards(rows[row]);
+  if (!cards.length) return;
+  col = Math.max(0, Math.min(col, cards.length - 1));
+  state._homeNfRow = row;
+  state._homeNfCol = col;
+  rows.forEach(r => getHomeNfCards(r).forEach(c => c.classList.remove('focused')));
+  cards[col].classList.add('focused');
+  cards[col].scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+}
+function getTopnavItems() {
+  return [...document.querySelectorAll('#nf-topnav .nf-topnav-item')];
+}
+function getTopnavDropdownItems() {
+  return [...document.querySelectorAll('#nf-topnav-dropdown .nf-topnav-dropdown-item')];
+}
+function closeTopnavDropdown() {
+  document.getElementById('nf-topnav-dropdown')?.classList.remove('open');
+  state._homeNfDropdownIdx = -1;
+}
+function focusTopnav(idx) {
+  const items = getTopnavItems();
+  if (!items.length) return;
+  closeTopnavDropdown();
+  idx = Math.max(0, Math.min(idx, items.length - 1));
+  state._homeNfTopIdx = idx;
+  items.forEach((it, i) => it.classList.toggle('focused', i === idx));
+  items[idx].scrollIntoView({ block: 'nearest', inline: 'nearest' });
+}
+function focusTopnavDropdown(idx) {
+  const items = getTopnavDropdownItems();
+  if (!items.length) return;
+  document.getElementById('nf-topnav-dropdown')?.classList.add('open');
+  idx = Math.max(0, Math.min(idx, items.length - 1));
+  state._homeNfDropdownIdx = idx;
+  items.forEach((it, i) => it.classList.toggle('focused', i === idx));
+}
+function handleHomeNetflixKey(key) {
+  const rows = getHomeNfRows();
+  const hero = state._homeNfHero;
+  switch (key) {
+    case 'ArrowRight':
+      playSnd('nav');
+      if (state._homeNfRow === -2) {
+        if (state._homeNfDropdownIdx >= 0) focusTopnavDropdown(state._homeNfDropdownIdx + 1);
+        else focusTopnav((state._homeNfTopIdx || 0) + 1);
+      } else if (state._homeNfRow === -1) {
+        state._homeNfHeroBtn = 'info'; updateHomeHeroFocus();
+      } else {
+        focusHomeNf(state._homeNfRow, (state._homeNfCol || 0) + 1);
+      }
+      break;
+    case 'ArrowLeft':
+      playSnd('nav');
+      if (state._homeNfRow === -2) {
+        if (state._homeNfDropdownIdx >= 0) focusTopnavDropdown(state._homeNfDropdownIdx - 1);
+        else focusTopnav((state._homeNfTopIdx || 0) - 1);
+      } else if (state._homeNfRow === -1) {
+        state._homeNfHeroBtn = 'play'; updateHomeHeroFocus();
+      } else {
+        focusHomeNf(state._homeNfRow, (state._homeNfCol || 0) - 1);
+      }
+      break;
+    case 'ArrowDown':
+      playSnd('nav');
+      if (state._homeNfRow === -2) {
+        if (state._homeNfDropdownIdx >= 0) { /* último nivel, sin más abajo */ }
+        else {
+          const activeEl = getTopnavItems()[state._homeNfTopIdx || 0];
+          if (activeEl && activeEl.id === 'nf-topnav-more-btn') {
+            focusTopnavDropdown(0);
+          } else {
+            getTopnavItems().forEach(it => it.classList.remove('focused'));
+            if (hero) { state._homeNfRow = -1; updateHomeHeroFocus(); }
+            else { state._homeNfRow = 0; focusHomeNf(0, 0); }
+          }
+        }
+      } else if (state._homeNfRow === -1) {
+        focusHomeNf(0, 0);
+      } else {
+        focusHomeNf(state._homeNfRow + 1, state._homeNfCol || 0);
+      }
+      break;
+    case 'ArrowUp':
+      playSnd('nav');
+      if (state._homeNfRow === -2) {
+        if (state._homeNfDropdownIdx >= 0) { closeTopnavDropdown(); focusTopnav(state._homeNfTopIdx || 0); }
+      } else if (state._homeNfRow === -1) {
+        state._homeNfRow = -2; focusTopnav(state._homeNfTopIdx || 0);
+      } else if (state._homeNfRow === 0) {
+        rows.forEach(r => getHomeNfCards(r).forEach(c => c.classList.remove('focused')));
+        if (hero) { state._homeNfRow = -1; updateHomeHeroFocus(); }
+        else { state._homeNfRow = -2; focusTopnav(state._homeNfTopIdx || 0); }
+      } else if (state._homeNfRow > 0) {
+        focusHomeNf(state._homeNfRow - 1, state._homeNfCol || 0);
+      }
+      break;
+    case 'Enter':
+      playSnd('enter');
+      if (state._homeNfRow === -2) {
+        if (state._homeNfDropdownIdx >= 0) {
+          getTopnavDropdownItems()[state._homeNfDropdownIdx]?.click();
+        } else {
+          const el = getTopnavItems()[state._homeNfTopIdx || 0];
+          if (el && el.id === 'nf-topnav-more-btn') focusTopnavDropdown(0);
+          else el?.click();
+        }
+      } else if (state._homeNfRow === -1) {
+        (state._homeNfHeroBtn === 'info' ? document.getElementById('home-hero-info') : document.getElementById('home-hero-play'))?.click();
+      } else {
+        getHomeNfCards(rows[state._homeNfRow])[state._homeNfCol]?.click();
+      }
+      break;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════
    SUGERENCIAS — renderizado y navegación
    ══════════════════════════════════════════════════════════════ */
 
@@ -550,6 +1111,28 @@ function shuffle(arr) {
     [a[i], a[j]] = [a[j], a[i]];
   }
   return a;
+}
+
+/* Conecta las flechas de navegación (‹ ›) de una fila horizontal tipo
+   Netflix. `wrap` debe contener .nf-row-track + .nf-arrow-left/.nf-arrow-right.
+   Reutilizable: la usan tanto las filas del tema Netflix como la fila
+   "Continuar viendo" del Home. Idempotente (se puede llamar de nuevo tras
+   re-renderizar la fila; simplemente vuelve a conectar los listeners). */
+function wireRowArrows(wrap) {
+  if (!wrap) return;
+  const track = wrap.querySelector('.nf-row-track');
+  const leftBtn = wrap.querySelector('.nf-arrow-left');
+  const rightBtn = wrap.querySelector('.nf-arrow-right');
+  if (!track || !leftBtn || !rightBtn) return;
+  function updateArrows() {
+    const maxScroll = track.scrollWidth - track.clientWidth;
+    leftBtn.classList.toggle('nf-arrow-hidden', track.scrollLeft <= 4);
+    rightBtn.classList.toggle('nf-arrow-hidden', maxScroll <= 4 || track.scrollLeft >= maxScroll - 4);
+  }
+  leftBtn.onclick = () => track.scrollBy({ left: -track.clientWidth * 0.85, behavior: 'smooth' });
+  rightBtn.onclick = () => track.scrollBy({ left: track.clientWidth * 0.85, behavior: 'smooth' });
+  track.onscroll = updateArrows;
+  updateArrows();
 }
 
 function renderSuggestions() {
@@ -564,10 +1147,10 @@ function renderSuggestions() {
 }
 
 function renderContinueWatching() {
-  const wrap = document.getElementById('suggestions-continue-wrap');
-  const row  = document.getElementById('suggestions-continue');
-  if (!row || !wrap) return;
-  row.innerHTML = '';
+  const wrap  = document.getElementById('suggestions-continue-wrap');
+  const track = document.getElementById('suggestions-continue');
+  if (!track || !wrap) return;
+  track.innerHTML = '';
 
   // Emparejar progreso guardado con las películas del catálogo actual (últimas 10)
   const items = (state.progress || [])
@@ -580,23 +1163,33 @@ function renderContinueWatching() {
 
   items.forEach(({ p, m }, i) => {
     const pct = p.duration > 0 ? Math.min(100, Math.round((p.position / p.duration) * 100)) : 0;
+    const accent = CW_ACCENTS[i % CW_ACCENTS.length];
     const card = document.createElement('div');
-    card.className = 'sugg-continue-card';
+    // .sugg-continue-card: clase usada por la navegación remota (ver
+    // setFocusZone/moveSuggFocus/updateSuggFocus). .cw-card: tarjeta
+    // panorámica compartida con el tema Netflix (ver styles.css).
+    card.className = 'sugg-continue-card cw-card';
     card.setAttribute('role', 'listitem');
     card.setAttribute('tabindex', '-1');
     card.dataset.idx = i;
-    const posterHtml = m.poster
-      ? `<img class="sm-poster" src="${m.poster}" alt="" onerror="handleImgError(this)" data-fallback="${m.emoji || '🎬'}" />`
-      : `<div class="sm-poster-fallback">${m.emoji || '🎬'}</div>`;
+    const frameHtml = m.poster
+      ? `<img src="${m.poster}" alt="" onerror="handleImgError(this)" data-fallback="${m.emoji || '🎬'}" />`
+      : `<div class="cw-frame-fallback">${m.emoji || '🎬'}</div>`;
     card.innerHTML = `
-      ${posterHtml}
-      <div class="sugg-continue-progress"><div class="sugg-continue-progress-fill" style="width:${pct}%"></div></div>
-      <div class="sm-title">${m.name || m.title || ''}</div>`;
+      <div class="cw-frame" style="--cw-accent:${accent}">
+        ${frameHtml}
+        <div class="cw-scrim"></div>
+        <div class="cw-play"><svg width="16" height="16" viewBox="0 0 24 24" fill="#fff"><polygon points="5,3 19,12 5,21"/></svg></div>
+        <div class="cw-title">${m.name || m.title || ''}</div>
+        <div class="cw-progress"><div class="cw-progress-fill" style="width:${pct}%"></div></div>
+      </div>`;
     card.addEventListener('click', () => openDetailModal('movie', m));
-    row.appendChild(card);
+    track.appendChild(card);
   });
   state._suggContinue = items.map(x => x.m);
   state.suggContinueIdx = 0;
+
+  wireRowArrows(wrap.querySelector('.nf-row-track-wrap'));
 }
 
 function renderMovieSuggestions() {
@@ -730,7 +1323,7 @@ function initDetailModal() {
     closeDetailModal();
     if (type === 'livetv') {
       state._trackMovie = null;
-      playStream(item.url, item.name || '');
+      playStream(item.url, item.name || '', null, true);
       return;
     }
     // Películas: arrancar desde el servidor seleccionado, con fallback automático
@@ -898,22 +1491,41 @@ function navigateTo(screenId, title, renderFn) {
   const domId = screenMap[screenId] || 'app';
   const current = document.querySelector('.screen.active');
   const next    = document.getElementById(`screen-${domId}`);
-  if (!next || next === current) return;
+  if (!next) return;
 
-  if (current) {
-    current.classList.add('exit-left');
-    setTimeout(() => current.classList.remove('active','exit-left'), 300);
+  // Películas/Live TV/Radio comparten el mismo contenedor #screen-app
+  // (el contenido interno cambia según qué función lo puebla). Si ya
+  // estaba activo pero se pidió OTRA app (ej. saltar Películas→Live TV
+  // directo desde el menú superior, sin pasar por Inicio), no hay que
+  // cortar acá — solo se omite la animación de entrada/salida (sería
+  // redundante, el panel ya está visible), pero el contenido SIEMPRE
+  // se vuelve a renderizar.
+  const sameScreenAlreadyActive = next === current;
+  if (sameScreenAlreadyActive && screenId === state.currentScreen && !renderFn) return;
+
+  if (!sameScreenAlreadyActive) {
+    if (current) {
+      current.classList.add('exit-left');
+      setTimeout(() => current.classList.remove('active','exit-left'), 300);
+    }
+    next.classList.add('enter-right');
+    setTimeout(() => { next.classList.add('active'); next.classList.remove('enter-right'); }, 30);
   }
-  next.classList.add('enter-right');
-  setTimeout(() => { next.classList.add('active'); next.classList.remove('enter-right'); }, 30);
 
   state.currentScreen = screenId;
   state.appNavHandler = null;
   state.settingsNavHandler = null;
+  updateNfTopnavActive();
   const tb = document.getElementById('topbar-title');
   if (tb) tb.textContent = title || 'Inicio';
   if (renderFn) renderFn();
-  if (screenId === 'home') setTimeout(() => { state.focusZone = 'dock'; focusTile(state.focusIndex); }, 350);
+  if (screenId === 'home') {
+    if (document.body.classList.contains('theme-netflix')) {
+      renderHomeNetflix();
+    } else {
+      setTimeout(() => { state.focusZone = 'dock'; focusTile(state.focusIndex); }, 350);
+    }
+  }
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -987,8 +1599,15 @@ const PLAYER_BTN_STYLE = 'background:rgba(255,255,255,0.12);border:none;color:#f
 
 function stopHLS() {
   if (state.hlsInstance) { state.hlsInstance.destroy(); state.hlsInstance = null; }
+  clearTimeout(state._playerLoadTimer);
+  clearTimeout(state._playerCodecTimer);
+  // Invalida cualquier timer/escalado de fallback (proxy/transcode) que
+  // haya quedado pendiente de una sesión de reproducción anterior — sin
+  // esto, un timeout tardío podía "revivir" un canal viejo encima del
+  // que el usuario eligió después (bug: seguía sonando en el fondo).
+  state._playerToken = (state._playerToken || 0) + 1;
   const v = document.getElementById('hls-video');
-  if (v) { v.pause(); v.src = ''; }
+  if (v) { v.pause(); v.removeAttribute('src'); v.onerror = null; v.load(); }
 }
 
 function enterPlayerFullscreen(el) {
@@ -1134,7 +1753,7 @@ function _updatePlayerServerBadge(idx, total) {
   badge.textContent = `Srv ${idx+1}/${total} — Cambiar`;
 }
 
-function playStream(url, title, onClose) {
+function playStream(url, title, onClose, isLive = false) {
   stopHLS();
   state.playerOnClose = typeof onClose === 'function' ? onClose : null;
 
@@ -1162,6 +1781,7 @@ function playStream(url, title, onClose) {
         ">← Atrás</button>
         <span id="player-title" style="color:#fff;font-size:1rem;font-weight:600;"></span>
         <span id="player-live-badge" style="
+          display:none;
           background:linear-gradient(135deg,#7c6af7,#3ecfcf);color:#fff;padding:3px 10px;
           border-radius:20px;font-size:0.7rem;font-weight:700;letter-spacing:0.03em;
         ">● LIVE</span>
@@ -1352,6 +1972,7 @@ function playStream(url, title, onClose) {
   }
 
   document.getElementById('player-title').textContent  = title || '';
+  document.getElementById('player-live-badge').style.display = isLive ? '' : 'none';
   document.getElementById('player-status').textContent = '';
   document.getElementById('player-seek-row').style.display = 'none'; // se muestra de nuevo en loadedmetadata si es VOD
   document.getElementById('player-playpause').textContent  = '⏸';
@@ -1380,40 +2001,150 @@ function playStream(url, title, onClose) {
   const isM3U8 = /\.m3u8(\?|#|$)/i.test(url);
 
   if (!isM3U8) {
-    const proxied = `${API}/proxy-stream?url=${encodeURIComponent(url)}`;
+    const proxied = `${API}/proxy-stream?url=${encodeURIComponent(url)}&token=${encodeURIComponent(getAuthTokenParam())}`;
     video.src = proxied;
     video.play().catch(() => showToast('⚠️ El navegador bloqueó el autoplay'));
     return;
   }
 
-  // Try HLS.js first, then native
-  if (typeof Hls !== 'undefined' && Hls.isSupported()) {
-    const hls = new Hls({
-      enableWorker: true,
-      lowLatencyMode: true,
-      backBufferLength: 30,
-    });
-    state.hlsInstance = hls;
-    hls.loadSource(url);
-    hls.attachMedia(video);
-    hls.on(Hls.Events.MANIFEST_PARSED, () => {
-      video.play().catch(() => showToast('⚠️ El navegador bloqueó el autoplay'));
-    });
-    hls.on(Hls.Events.ERROR, (e, data) => {
-      if (data.fatal) {
-        status.textContent = '⚠️ Error de stream';
+  // FIX AGRESIVO (jul 2026) — canales m3u8 rotos, 3 niveles de fallback,
+  // cada uno ataca una causa distinta de por qué "en VLC anda y acá no":
+  //
+  //  Nivel 1 — URL directa (o proxy-m3u8 forzado si es http:// en página
+  //            https://, mixed-content: el navegador lo bloquea sí o sí).
+  //  Nivel 2 — proxy-m3u8: soluciona CORS del servidor de origen (server.js
+  //            reescribe manifiesto + segmentos + URIs embebidas).
+  //  Nivel 3 — /api/transcode: soluciona códec de video incompatible con el
+  //            navegador (típico: HEVC/H.265 o MPEG-2 — VLC los decodifica
+  //            sin problema, Chrome/HTML5 no; por eso se escucha audio pero
+  //            no hay video). Reencodea en el servidor a H.264/AAC con
+  //            ffmpeg y se reproduce como MP4 directo, sin HLS.js.
+  //
+  // Además: si un nivel tarda demasiado en arrancar (canal caído/timeout de
+  // red) o si se detecta audio sonando sin video (buen indicio de códec
+  // incompatible), se escala automáticamente al siguiente nivel en vez de
+  // dejar al usuario esperando indefinidamente.
+  const forceProxy = location.protocol === 'https:' && /^http:\/\//i.test(url);
+  const proxiedM3U8   = `${API}/proxy-m3u8?url=${encodeURIComponent(url)}&token=${encodeURIComponent(getAuthTokenParam())}`;
+  const transcodedUrl = `${API}/transcode?url=${encodeURIComponent(url)}&token=${encodeURIComponent(getAuthTokenParam())}`;
+  let currentTier = forceProxy ? 2 : 1;
+
+  // Token de sesión: stopHLS() (llamada al cerrar el player o al arrancar
+  // OTRO playStream()) incrementa state._playerToken. Cualquier callback
+  // async (timer de timeout, error de HLS.js) que dispare después de que
+  // el usuario ya cambió de canal queda invalidado acá — sin esto, un
+  // fallback tardío de un canal viejo podía pisar el video.src del canal
+  // que el usuario eligió después ("sigue sonando en el fondo").
+  const myToken = state._playerToken;
+
+  function clearLoadGuards() {
+    clearTimeout(state._playerLoadTimer);
+    clearTimeout(state._playerCodecTimer);
+  }
+
+  function playerStillOpen() {
+    return myToken === state._playerToken
+      && document.body.contains(video)
+      && !!document.getElementById('player-overlay');
+  }
+
+  function loadTranscoded() {
+    if (!playerStillOpen()) return;
+    clearLoadGuards();
+    currentTier = 3;
+    status.textContent = '🔄 Convirtiendo video…';
+    video.src = transcodedUrl;
+    video.play().catch(() => showToast('⚠️ El navegador bloqueó el autoplay'));
+    state._playerLoadTimer = setTimeout(() => {
+      if (playerStillOpen() && video.readyState < 2) {
+        status.textContent = '⚠️ Este canal no está disponible';
         loading.style.display = 'none';
       }
-    });
-  } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-    // Native HLS (Safari, smart TVs)
-    video.src = url;
-    video.play().catch(() => {});
-  } else {
-    // Fallback: direct src
-    video.src = url;
-    video.play().catch(() => {});
+    }, 15000);
+    video.onerror = () => {
+      if (!playerStillOpen()) return;
+      status.textContent = '⚠️ Este canal no está disponible';
+      loading.style.display = 'none';
+    };
   }
+
+  function loadHlsSource(src) {
+    if (!playerStillOpen()) return;
+    clearLoadGuards();
+    if (typeof Hls !== 'undefined' && Hls.isSupported()) {
+      const hls = new Hls({
+        enableWorker: true,
+        lowLatencyMode: true,
+        backBufferLength: 30,
+      });
+      state.hlsInstance = hls;
+      hls.loadSource(src);
+      hls.attachMedia(video);
+
+      let escalated = false;
+      let recoverAttempted = false;
+      const escalate = () => {
+        if (escalated || !playerStillOpen()) return;
+        escalated = true;
+        clearLoadGuards();
+        hls.destroy();
+        if (currentTier === 1) { currentTier = 2; loadHlsSource(proxiedM3U8); }
+        else loadTranscoded();
+      };
+
+      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        if (!playerStillOpen()) return;
+        video.play().catch(() => showToast('⚠️ El navegador bloqueó el autoplay'));
+      });
+      hls.on(Hls.Events.ERROR, (e, data) => {
+        if (!data.fatal || !playerStillOpen()) return;
+        // Muchos servidores IPTV caseros tienen cortes de red de un
+        // segundo o discontinuidades de playlist que HLS.js marca como
+        // "fatal" aunque son perfectamente recuperables in-place sin
+        // cambiar de URL ni de nivel. Se intenta UNA vez la recuperación
+        // nativa antes de tirar todo y escalar — evita terminar en
+        // transcodificación por un hipo de red que se hubiera arreglado solo.
+        if (!recoverAttempted) {
+          recoverAttempted = true;
+          if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+            hls.startLoad();
+            return;
+          }
+          if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+            hls.recoverMediaError();
+            return;
+          }
+        }
+        escalate();
+      });
+
+      // Canal caído / red lenta: no llegó a reproducir en un tiempo razonable
+      state._playerLoadTimer = setTimeout(() => {
+        if (playerStillOpen() && video.readyState < 2) escalate();
+      }, 9000);
+
+      // Audio sonando pero sin video -> indicio fuerte de códec de video
+      // incompatible (VLC lo abre porque decodifica más códecs que el navegador)
+      video.addEventListener('playing', function onPlaying() {
+        video.removeEventListener('playing', onPlaying);
+        state._playerCodecTimer = setTimeout(() => {
+          if (playerStillOpen() && !escalated && !video.paused && video.currentTime > 0 && video.videoWidth === 0) {
+            escalate();
+          }
+        }, 4000);
+      });
+    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+      // Native HLS (Safari, smart TVs)
+      video.src = src;
+      video.play().catch(() => {});
+    } else {
+      // Fallback: direct src
+      video.src = src;
+      video.play().catch(() => {});
+    }
+  }
+
+  loadHlsSource(currentTier === 2 ? proxiedM3U8 : url);
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -1500,6 +2231,23 @@ function openLiveTV() {
               animation:player-spin 0.9s linear infinite;
             "></div>
           </div>
+          <div id="livetv-preview-controls" style="
+            position:absolute;left:0;right:0;bottom:0;display:none;
+            align-items:center;gap:10px;padding:8px 12px;
+            background:linear-gradient(to top,rgba(0,0,0,0.75),transparent);
+          ">
+            <button type="button" id="livetv-preview-mute" style="
+              background:none;border:none;color:#fff;font-size:1rem;
+              cursor:pointer;padding:2px 4px;line-height:1;flex-shrink:0;
+            ">🔊</button>
+            <input type="range" id="livetv-preview-volume" min="0" max="1" step="0.05" value="1" style="
+              flex:1;accent-color:#3ecfcf;height:4px;cursor:pointer;
+            " />
+            <span style="
+              font-size:0.65rem;color:rgba(255,255,255,0.6);
+              background:rgba(255,255,255,0.1);padding:2px 6px;border-radius:4px;flex-shrink:0;
+            ">● EN VIVO</span>
+          </div>
         </div>
         <div id="livetv-preview-name" style="
           font-size:0.95rem;font-weight:600;color:var(--text-primary);
@@ -1542,17 +2290,26 @@ function openLiveTV() {
       list.querySelectorAll('.tv-channel-row').forEach(row => {
         row.addEventListener('mouseenter', () => row.style.background = 'rgba(255,255,255,0.05)');
         row.addEventListener('mouseleave', () => row.style.background = 'transparent');
+
+        // Click único = vista previa (mismo comportamiento que Enter 1° con
+        // el control remoto). Doble click = pantalla completa (Enter 2°).
+        // Antes el click simple llamaba a playStream() directo y se
+        // saltaba la vista previa por completo — de ahí el reclamo de
+        // "un clic y me manda a fullscreen".
+        let clickTimer = null;
         row.addEventListener('click', () => {
-          const url  = row.dataset.url;
-          const name = row.dataset.name;
-          if (!url) { showToast('⚠️ Canal sin URL configurada'); return; }
-          stopLivePreviewVideo();
-          previewedUrl = url;
-          previewPlaying = true;
-          state._trackMovie = null;
-          playStream(url, name, () => {
-            if (previewedUrl === url) { startLivePreviewVideo(url); updatePreviewHint(); }
-          });
+          if (!row.dataset.url) { showToast('⚠️ Canal sin URL configurada'); return; }
+          clearTimeout(clickTimer);
+          clickTimer = setTimeout(() => {
+            focusChan(parseInt(row.dataset.index, 10));
+            startPreviewForFocused();
+          }, 220);
+        });
+        row.addEventListener('dblclick', () => {
+          if (!row.dataset.url) return;
+          clearTimeout(clickTimer);
+          focusChan(parseInt(row.dataset.index, 10));
+          expandPreviewToFullscreen();
         });
       });
     }
@@ -1575,6 +2332,29 @@ function openLiveTV() {
 
     renderChannelList(activeCat);
 
+    // Controles de la vista previa (mute + volumen) — se atan una sola vez,
+    // los elementos ya existen en el DOM desde el innerHTML de arriba.
+    const previewVideoEl = document.getElementById('livetv-preview-video');
+    const previewMuteBtn = document.getElementById('livetv-preview-mute');
+    const previewVolume  = document.getElementById('livetv-preview-volume');
+    if (previewMuteBtn && previewVideoEl) {
+      previewMuteBtn.addEventListener('click', () => {
+        previewVideoEl.muted = !previewVideoEl.muted;
+        if (!previewVideoEl.muted && previewVideoEl.volume === 0) {
+          previewVideoEl.volume = 1;
+          if (previewVolume) previewVolume.value = 1;
+        }
+        previewMuteBtn.textContent = (previewVideoEl.muted || previewVideoEl.volume === 0) ? '🔇' : '🔊';
+      });
+    }
+    if (previewVolume && previewVideoEl) {
+      previewVolume.addEventListener('input', () => {
+        previewVideoEl.volume = parseFloat(previewVolume.value);
+        previewVideoEl.muted  = previewVideoEl.volume === 0;
+        if (previewMuteBtn) previewMuteBtn.textContent = previewVideoEl.muted ? '🔇' : '🔊';
+      });
+    }
+
     /* Navegación con control remoto: ←→ cambia de panel, ↑↓ recorre la lista activa */
     /* Vista previa de Live TV — modelo explícito:
        Enter (1°) -> reproduce en la vista previa chica, sin pantalla completa
@@ -1586,9 +2366,11 @@ function openLiveTV() {
       const v = document.getElementById('livetv-preview-video');
       const fallback = document.getElementById('livetv-preview-fallback');
       const loading = document.getElementById('livetv-preview-loading');
+      const controls = document.getElementById('livetv-preview-controls');
       if (v) { v.pause(); v.removeAttribute('src'); v.onerror = null; v.load(); v.style.display = 'none'; }
       if (fallback) fallback.style.display = 'flex';
       if (loading)  loading.style.display = 'none';
+      if (controls) controls.style.display = 'none';
     }
     function stopLivePreview() {
       stopLivePreviewVideo();
@@ -1599,15 +2381,22 @@ function openLiveTV() {
       const v        = document.getElementById('livetv-preview-video');
       const fallback = document.getElementById('livetv-preview-fallback');
       const loading  = document.getElementById('livetv-preview-loading');
+      const controls = document.getElementById('livetv-preview-controls');
       if (!v || !url) return;
       const isM3U8 = /\.m3u8(\?|#|$)/i.test(url);
       v.volume = 1;
       v.muted  = false; // acción explícita del usuario (Enter) -> con audio
+      const syncMuteIcon = () => {
+        const btn = document.getElementById('livetv-preview-mute');
+        if (btn) btn.textContent = (v.muted || v.volume === 0) ? '🔇' : '🔊';
+      };
       if (loading) loading.style.display = 'flex';
       const reveal = () => {
         v.style.display = 'block';
         if (fallback) fallback.style.display = 'none';
         if (loading)  loading.style.display = 'none';
+        if (controls) controls.style.display = 'flex';
+        syncMuteIcon();
       };
       const attemptPlay = () => v.play().then(reveal).catch(() => {
         // el navegador bloqueó autoplay con audio -> reintentar silenciado
@@ -1616,6 +2405,7 @@ function openLiveTV() {
       });
       const failPreview = () => {
         if (loading) loading.style.display = 'none';
+        if (controls) controls.style.display = 'none';
         previewPlaying = false;
         updatePreviewHint();
         showToast('⚠️ No se pudo cargar la vista previa de este canal');
@@ -1623,29 +2413,50 @@ function openLiveTV() {
 
       if (!isM3U8) {
         // mp4/audio/sin extensión -> proxy (evita CORS), igual que el reproductor principal
-        const proxied = `${API}/proxy-stream?url=${encodeURIComponent(url)}`;
+        const proxied = `${API}/proxy-stream?url=${encodeURIComponent(url)}&token=${encodeURIComponent(getAuthTokenParam())}`;
         v.src = proxied;
         v.onerror = failPreview;
         attemptPlay();
         return;
       }
 
-      // .m3u8 -> URL directa (NO por el proxy: rompería las rutas relativas
-      // de los segmentos .ts dentro del manifiesto), igual que el reproductor principal
-      if (typeof Hls !== 'undefined' && Hls.isSupported()) {
-        const hls = new Hls({ enableWorker: true, lowLatencyMode: true, backBufferLength: 30 });
-        hls.loadSource(url);
-        hls.attachMedia(v);
-        hls.on(Hls.Events.MANIFEST_PARSED, attemptPlay);
-        hls.on(Hls.Events.ERROR, (e, data) => { if (data.fatal) failPreview(); });
-        previewHls = hls;
-      } else if (v.canPlayType('application/vnd.apple.mpegurl')) {
-        v.src = url;
-        v.onerror = failPreview;
-        attemptPlay();
-      } else {
-        failPreview();
+      // FIX AGRESIVO (jul 2026): antes se usaba SIEMPRE la URL directa acá
+      // porque una versión vieja del proxy rompía las rutas de los .ts
+      // (no reescribía URIs embebidas en tags como EXT-X-MAP/EXT-X-KEY).
+      // Ya está corregido en server.js. Mismo criterio que el reproductor
+      // principal: forzar proxy si es http:// (mixed-content, bloqueo
+      // seguro del navegador) y reintentar por proxy una vez si falla.
+      const forceProxy = location.protocol === 'https:' && /^http:\/\//i.test(url);
+      const proxiedM3U8 = `${API}/proxy-m3u8?url=${encodeURIComponent(url)}&token=${encodeURIComponent(getAuthTokenParam())}`;
+      let usedProxyFallback = forceProxy;
+
+      function loadPreviewHls(src) {
+        if (typeof Hls !== 'undefined' && Hls.isSupported()) {
+          const hls = new Hls({ enableWorker: true, lowLatencyMode: true, backBufferLength: 30 });
+          hls.loadSource(src);
+          hls.attachMedia(v);
+          hls.on(Hls.Events.MANIFEST_PARSED, attemptPlay);
+          hls.on(Hls.Events.ERROR, (e, data) => {
+            if (!data.fatal) return;
+            if (!usedProxyFallback) {
+              usedProxyFallback = true;
+              hls.destroy();
+              loadPreviewHls(proxiedM3U8);
+              return;
+            }
+            failPreview();
+          });
+          previewHls = hls;
+        } else if (v.canPlayType('application/vnd.apple.mpegurl')) {
+          v.src = src;
+          v.onerror = failPreview;
+          attemptPlay();
+        } else {
+          failPreview();
+        }
       }
+
+      loadPreviewHls(forceProxy ? proxiedM3U8 : url);
     }
     function updatePreviewHint() {
       const hint = document.getElementById('livetv-preview-hint');
@@ -1691,7 +2502,7 @@ function openLiveTV() {
       state._trackMovie = null;
       playStream(url, name, () => {
         if (previewedUrl === url) { startLivePreviewVideo(url); updatePreviewHint(); }
-      });
+      }, true);
     }
 
     const getCatEls  = () => [...document.querySelectorAll('.tv-cat-item')];
@@ -1833,10 +2644,6 @@ function openMovies() {
         const urls = (m.urls && m.urls.length) ? m.urls : [m.url];
         if (!urls[0]) { showToast('⚠️ Sin URL configurada'); return; }
         playMovieWithFallback(urls, m.name || '');
-        setTimeout(() => {
-          const badge = document.getElementById('player-live-badge');
-          if (badge) badge.textContent = 'VOD';
-        }, 100);
       });
     });
 
@@ -1923,6 +2730,47 @@ function renderMoviesNetflix(body, back, movies) {
     .filter(Boolean)
     .slice(0, 10);
 
+  // "Nuevo en MythOS TV" — películas con sello addedAt (admin.html), más recientes primero.
+  // NEW_ROW_LIMIT tarjetas visibles en la fila; si hay más, se agrega una tarjeta "Ver más"
+  // que abre openNewMoviesView() con el listado completo (sin sacar el contenido del resto
+  // de Películas: sigue apareciendo también en su fila de género/valoración normal).
+  const NEW_ROW_LIMIT = 10;
+  const newItemsAll = movies
+    .map((m, i) => ({ m, i }))
+    .filter(({ m }) => !!m.addedAt)
+    .sort((a, b) => b.m.addedAt - a.m.addedAt);
+  const newItemsRow = newItemsAll.slice(0, NEW_ROW_LIMIT);
+
+  function buildNewRow(rIdx) {
+    if (!newItemsRow.length) return '';
+    const hasMore = newItemsAll.length > NEW_ROW_LIMIT;
+    return `
+      <div class="nf-row" data-row="${rIdx}">
+        <div class="nf-row-title">
+          <span class="nf-row-accent" style="background:#22c55e"></span>Nuevo en MythOS TV
+        </div>
+        <div class="nf-row-track-wrap">
+          <button type="button" class="nf-row-arrow nf-arrow-left nf-arrow-hidden" aria-label="Anterior">&#8249;</button>
+          <div class="nf-row-track" data-row="${rIdx}">
+            ${newItemsRow.map(({ m, i }) => `
+              <div class="nf-card" tabindex="-1" data-index="${i}">
+                ${m.poster
+                  ? `<img class="nf-card-poster" src="${m.poster}" alt="" data-fallback="${m.emoji || '🎬'}" onerror="handleImgError(this)" />`
+                  : `<div class="nf-card-fallback">${m.emoji || '🎬'}</div>`}
+                <div class="nf-card-title">${m.name || m.title || ''}</div>
+              </div>
+            `).join('')}
+            ${hasMore ? `
+              <div class="nf-card" tabindex="-1" data-more="new" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;background:rgba(255,255,255,0.03);border:1px dashed rgba(255,255,255,0.25);border-radius:8px;">
+                <div style="font-size:1.8rem;opacity:0.85;">➕</div>
+                <div style="font-size:0.8rem;font-weight:600;color:var(--text-primary);">Ver más</div>
+              </div>` : ''}
+          </div>
+          <button type="button" class="nf-row-arrow nf-arrow-right nf-arrow-hidden" aria-label="Siguiente">&#8250;</button>
+        </div>
+      </div>`;
+  }
+
   function buildRow(label, items, accentColor, rIdx) {
     if (!items.length) return '';
     return `
@@ -1949,6 +2797,9 @@ function renderMoviesNetflix(body, back, movies) {
 
   function buildContinueRow(rIdx) {
     if (!continueItems.length) return '';
+    // .nf-card: mantiene el foco/navegación remota y el clic ya cableados
+    // más abajo (mismo selector que el resto de filas). .cw-card: tarjeta
+    // panorámica compartida con la fila "Continuar viendo" del Home.
     return `
       <div class="nf-row" data-row="${rIdx}">
         <div class="nf-row-title">
@@ -1957,15 +2808,21 @@ function renderMoviesNetflix(body, back, movies) {
         <div class="nf-row-track-wrap">
           <button type="button" class="nf-row-arrow nf-arrow-left nf-arrow-hidden" aria-label="Anterior">&#8249;</button>
           <div class="nf-row-track" data-row="${rIdx}">
-            ${continueItems.map(({ m, i, p }) => {
+            ${continueItems.map(({ m, i, p }, idx) => {
               const pct = p.duration > 0 ? Math.min(100, Math.round((p.position / p.duration) * 100)) : 0;
+              const accent = CW_ACCENTS[idx % CW_ACCENTS.length];
+              const frameHtml = m.poster
+                ? `<img src="${m.poster}" alt="" data-fallback="${m.emoji || '🎬'}" onerror="handleImgError(this)" />`
+                : `<div class="cw-frame-fallback">${m.emoji || '🎬'}</div>`;
               return `
-                <div class="nf-card" tabindex="-1" data-index="${i}">
-                  ${m.poster
-                    ? `<img class="nf-card-poster" src="${m.poster}" alt="" data-fallback="${m.emoji || '🎬'}" onerror="handleImgError(this)" />`
-                    : `<div class="nf-card-fallback">${m.emoji || '🎬'}</div>`}
-                  <div class="nf-card-progress"><div class="nf-card-progress-fill" style="width:${pct}%"></div></div>
-                  <div class="nf-card-title">${m.name || m.title || ''}</div>
+                <div class="nf-card cw-card" tabindex="-1" data-index="${i}">
+                  <div class="cw-frame" style="--cw-accent:${accent}">
+                    ${frameHtml}
+                    <div class="cw-scrim"></div>
+                    <div class="cw-play"><svg width="16" height="16" viewBox="0 0 24 24" fill="#fff"><polygon points="5,3 19,12 5,21"/></svg></div>
+                    <div class="cw-title">${m.name || m.title || ''}</div>
+                    <div class="cw-progress"><div class="cw-progress-fill" style="width:${pct}%"></div></div>
+                  </div>
                 </div>`;
             }).join('')}
           </div>
@@ -1977,6 +2834,7 @@ function renderMoviesNetflix(body, back, movies) {
   let rIdx = 0;
   const rowsHtml = [];
   if (continueItems.length) rowsHtml.push(buildContinueRow(rIdx++));
+  if (newItemsRow.length) rowsHtml.push(buildNewRow(rIdx++));
   if (topRated.length) rowsHtml.push(buildRow('Mejor valoradas', topRated, ACCENTS[0], rIdx++));
   [...genreMap.entries()].forEach(([genre, items], gi) => {
     rowsHtml.push(buildRow(genre, items, ACCENTS[1 + (gi % (ACCENTS.length - 1))], rIdx++));
@@ -1986,6 +2844,12 @@ function renderMoviesNetflix(body, back, movies) {
   body.innerHTML = `<div id="nf-movies-rows" class="nf-rows" style="padding-top:8px">${rowsHtml.join('')}</div>`;
 
   body.querySelectorAll('.nf-card').forEach(card => {
+    if (card.dataset.more === 'new') {
+      card.addEventListener('click', () => openNewMoviesView(newItemsAll.map(x => x.m)));
+      card.addEventListener('mouseenter', () => { card.classList.add('focused'); });
+      card.addEventListener('mouseleave', () => { card.classList.remove('focused'); });
+      return;
+    }
     card.addEventListener('click', () => {
       const m = movies[parseInt(card.dataset.index)];
       if (m) openDetailModal('movie', m);
@@ -1997,20 +2861,7 @@ function renderMoviesNetflix(body, back, movies) {
   /* Flechas de navegación por mouse en cada fila: aparecen al hover
      (ver CSS .nf-row-track-wrap:hover .nf-row-arrow), se ocultan según
      posición de scroll (izquierda al inicio, derecha al final). */
-  body.querySelectorAll('.nf-row-track-wrap').forEach(wrap => {
-    const track = wrap.querySelector('.nf-row-track');
-    const leftBtn = wrap.querySelector('.nf-arrow-left');
-    const rightBtn = wrap.querySelector('.nf-arrow-right');
-    function updateArrows() {
-      const maxScroll = track.scrollWidth - track.clientWidth;
-      leftBtn.classList.toggle('nf-arrow-hidden', track.scrollLeft <= 4);
-      rightBtn.classList.toggle('nf-arrow-hidden', maxScroll <= 4 || track.scrollLeft >= maxScroll - 4);
-    }
-    leftBtn.addEventListener('click', () => track.scrollBy({ left: -track.clientWidth * 0.85, behavior: 'smooth' }));
-    rightBtn.addEventListener('click', () => track.scrollBy({ left: track.clientWidth * 0.85, behavior: 'smooth' }));
-    track.addEventListener('scroll', updateArrows);
-    updateArrows();
-  });
+  body.querySelectorAll('.nf-row-track-wrap').forEach(wireRowArrows);
 
   /* Navegación remoto: Arriba/Abajo = fila, Izq/Der = dentro de la fila.
      Virtualización simple: solo se hace scrollIntoView de la tarjeta
@@ -2055,6 +2906,94 @@ function renderMoviesNetflix(body, back, movies) {
     return true;
   };
   focusCard();
+}
+
+/* ── "Ver más" de "Nuevo en MythOS TV" — grilla filtrada, mismo patrón
+   visual/de navegación remota que openMovies() en modo grilla plana,
+   pero solo con las películas recién agregadas (addedAt). Vuelve al
+   tema Netflix de Películas al presionar atrás. ── */
+function openNewMoviesView(items) {
+  const body  = document.getElementById('app-screen-body');
+  const back  = document.getElementById('app-back');
+  const title = document.getElementById('app-screen-title');
+  title.textContent = 'Nuevo en MythOS TV';
+  back.onclick = () => { title.textContent = 'Películas'; renderMoviesNetflix(body, back, state.movies); };
+
+  body.style.cssText = 'align-items:flex-start;padding:12px 0;';
+  body.innerHTML = `
+    <div id="new-movies-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:16px;width:100%;padding:4px;">
+      ${items.map((m, i) => `
+        <div class="movie-card" data-index="${i}" style="
+          background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);
+          border-radius:12px;overflow:hidden;cursor:pointer;transition:0.2s;
+        ">
+          <div style="
+            height:100px;background:rgba(255,255,255,0.05);
+            display:flex;align-items:center;justify-content:center;font-size:2.5rem;
+            overflow:hidden;
+          ">${m.poster
+            ? `<img src="${m.poster}" alt="" data-fallback="${m.emoji || '🎬'}" onerror="handleImgError(this)" style="width:100%;height:100%;object-fit:cover;" />`
+            : (m.emoji || '🎬')}</div>
+          <div style="padding:10px 12px;">
+            <div style="font-size:0.82rem;font-weight:600;color:var(--text-primary);margin-bottom:3px;
+              white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${m.name || m.title || ''}</div>
+            <div style="font-size:0.7rem;color:var(--text-muted);">${m.cat || 'Película'}</div>
+          </div>
+        </div>
+      `).join('')}
+    </div>
+  `;
+
+  body.querySelectorAll('.movie-card').forEach(card => {
+    card.addEventListener('mouseenter', () => { card.style.transform='translateY(-3px)'; card.style.borderColor='rgba(124,106,247,0.4)'; });
+    card.addEventListener('mouseleave', () => { card.style.transform=''; card.style.borderColor='rgba(255,255,255,0.07)'; });
+    card.addEventListener('click', () => {
+      const m = items[parseInt(card.dataset.index)];
+      if (m) openDetailModal('movie', m);
+    });
+  });
+
+  /* Navegación remota: mismo patrón de grilla que openMovies() */
+  let _newIdx = 0;
+  const getCards = () => [...body.querySelectorAll('.movie-card')];
+  const getCols  = () => {
+    const grid = document.getElementById('new-movies-grid');
+    if (!grid) return 1;
+    return getComputedStyle(grid).gridTemplateColumns.split(' ').filter(Boolean).length || 1;
+  };
+  function focusNew(i) {
+    const cards = getCards();
+    if (!cards.length) return;
+    _newIdx = Math.max(0, Math.min(i, cards.length - 1));
+    cards.forEach((c, j) => setRemoteFocus(c, j === _newIdx));
+    cards[_newIdx].scrollIntoView({ block: 'nearest' });
+  }
+  let atBackNew = false;
+  state.appNavHandler = (key) => {
+    const cards = getCards();
+    if (!cards.length) return;
+    if (key === 'Enter') {
+      playSnd('enter');
+      if (atBackNew) back.click(); else cards[_newIdx]?.click();
+      return true;
+    }
+    if (!['ArrowRight','ArrowLeft','ArrowDown','ArrowUp'].includes(key)) return false;
+    playSnd('nav');
+    const cols = getCols();
+    if (atBackNew) {
+      if (key === 'ArrowDown') { atBackNew = false; focusAppBack(false); focusNew(_newIdx); }
+      return true;
+    }
+    if (key === 'ArrowRight') focusNew(_newIdx + 1);
+    if (key === 'ArrowLeft')  focusNew(_newIdx - 1);
+    if (key === 'ArrowDown')  focusNew(_newIdx + cols);
+    if (key === 'ArrowUp') {
+      if (_newIdx - cols >= 0) focusNew(_newIdx - cols);
+      else { atBackNew = true; cards.forEach(c => setRemoteFocus(c, false)); focusAppBack(true); }
+    }
+    return true;
+  };
+  focusNew(0);
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -2196,7 +3135,7 @@ function startRadioStream(url) {
   if (!url) { showToast('ℹ️ URL de stream no configurada'); return; }
 
   // Siempre pasar por proxy: resuelve mixed-content (HTTP en HTTPS) y CORS
-  const proxied = url.startsWith('/api/') ? url : `${API}/proxy-stream?url=${encodeURIComponent(url)}`;
+  const proxied = url.startsWith('/api/') ? url : `${API}/proxy-stream?url=${encodeURIComponent(url)}&token=${encodeURIComponent(getAuthTokenParam())}`;
 
   if (!state.radioAudio) state.radioAudio = new Audio();
   state.radioAudio.src = proxied;
@@ -2351,7 +3290,7 @@ function initSettingsListeners() {
       // (hay que traer el config completo primero: /api/admin/config reemplaza
       // todo el archivo, si solo mandamos estos campos se perderían canales/launcher/etc.)
       try {
-        const cfgRes = await fetch(`${API}/config`);
+        const cfgRes = await fetch(`${API}/config`, { headers: getAuthHeaders() });
         const cfg    = await cfgRes.json();
         Object.assign(cfg, { wallpaper, timeFormat, timezone, glassEnabled, soundEnabled });
         const r = await fetch(`${API}/admin/config`, {

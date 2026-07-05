@@ -26,6 +26,16 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet" />
 </head>
 <body>
+  <script>
+    // Aplica el tema guardado ANTES de pintar nada — evita el destello
+    // del tema clásico mientras se espera la respuesta de /api/config
+    // (ver applyTheme() en app.js, que mantiene este valor actualizado).
+    try {
+      if (localStorage.getItem('mythos-theme') === 'netflix') {
+        document.body.classList.add('theme-netflix');
+      }
+    } catch (e) {}
+  </script>
 
   <!-- ═══════════════════════════════════════════ USER LOGIN/REGISTER -->
   <div id="user-screen" style="
@@ -74,14 +84,20 @@
       <div id="user-register-panel" style="display:none;">
         <div style="margin-bottom:12px;">
           <div style="font-size:0.7rem;font-weight:600;color:rgba(255,255,255,0.35);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px;">Nombre de usuario</div>
-          <input type="text" id="user-reg-name" placeholder="Cómo te llamas"
+          <input type="text" id="user-reg-name" placeholder="Para iniciar sesión"
+            style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);
+            border-radius:10px;padding:11px 14px;color:#f0f0fa;font-size:0.9rem;font-family:inherit;outline:none;" />
+        </div>
+        <div style="margin-bottom:12px;">
+          <div style="font-size:0.7rem;font-weight:600;color:rgba(255,255,255,0.35);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px;">Nombre para mostrar</div>
+          <input type="text" id="user-reg-displayname" placeholder="Cómo te llamas (para el sistema)"
             style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);
             border-radius:10px;padding:11px 14px;color:#f0f0fa;font-size:0.9rem;font-family:inherit;outline:none;" />
         </div>
         <div style="margin-bottom:12px;">
           <div style="font-size:0.7rem;font-weight:600;color:rgba(255,255,255,0.35);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:8px;">Elige tu avatar</div>
-          <div id="user-emoji-picker" style="display:flex;flex-wrap:wrap;gap:8px;">
-            ${'🎬 🎮 🎵 🌙 🚀 🦁 🐉 🌊 ⚡ 🎯 🔥 🌟 🎭 🤖 🦊 🐺'.split(' ').map(e =>
+          <div id="user-emoji-picker" style="display:flex;flex-wrap:wrap;gap:8px;max-height:130px;overflow-y:auto;">
+            ${'🎬 🎮 🎵 🌙 🚀 🦁 🐉 🌊 ⚡ 🎯 🔥 🌟 🎭 🤖 🦊 🐺 🐯 🦄 🐼 🦋 🌈 🍿 🎧 🎨 ⭐ 💎 🌺 🍕 ⚽ 🏀 🎸 📚'.split(' ').map(e =>
               `<button onclick="selectEmoji(this,'${e}')" style="
                 width:38px;height:38px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);
                 border-radius:8px;font-size:1.2rem;cursor:pointer;transition:0.15s;">${e}</button>`).join('')}
@@ -155,6 +171,11 @@
         <span class="topbar-brand">Myth<span class="topbar-os">OS TV</span></span>
       </div>
       <div class="topbar-center" id="topbar-title">Inicio</div>
+      <!-- Menú estilo Netflix — solo visible con body.theme-netflix (ver
+           styles.css). Persistente en Inicio/Películas/Live TV/Radio.
+           Se arma por JS (ver initNfTopnav() / updateNfTopnavActive() en
+           app.js) para reflejar el dock configurado desde admin. -->
+      <nav class="nf-topnav" id="nf-topnav" aria-label="Navegación principal"></nav>
       <div class="topbar-right">
         <span class="topbar-time" id="topbar-time">--:--</span>
         <span class="topbar-date" id="topbar-date">---</span>
@@ -163,6 +184,16 @@
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/>
               <path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><circle cx="12" cy="20" r="1" fill="currentColor"/>
+            </svg>
+          </span>
+          <span class="topbar-icon" id="topbar-logout-btn" title="Cerrar sesión" role="button" tabindex="0"
+                style="cursor:pointer;"
+                onclick="if(confirm('¿Cerrar sesión?')) doLogout();"
+                onkeydown="if(event.key==='Enter'&&confirm('¿Cerrar sesión?')) doLogout();">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+              <polyline points="16 17 21 12 16 7"/>
+              <line x1="21" y1="12" x2="9" y2="12"/>
             </svg>
           </span>
         </div>
@@ -175,6 +206,9 @@
       <!-- HOME SCREEN -->
       <section class="screen active" id="screen-home">
 
+        <!-- Home clásico (tema por defecto) -->
+        <div class="home-default-view" id="home-default-view">
+
         <!-- Hero saludo -->
         <div class="home-hero">
           <div class="home-greeting" id="home-greeting">Buenas noches</div>
@@ -184,7 +218,11 @@
         <!-- Continuar viendo -->
         <div class="home-suggestions" id="suggestions-continue-wrap">
           <div class="suggestions-label">Continuar viendo</div>
-          <div class="suggestions-row" id="suggestions-continue" role="list" aria-label="Continuar viendo">
+          <div class="nf-row-track-wrap">
+            <button type="button" class="nf-row-arrow nf-arrow-left nf-arrow-hidden" aria-label="Anterior">&#8249;</button>
+            <div class="nf-row-track" id="suggestions-continue" role="list" aria-label="Continuar viendo">
+            </div>
+            <button type="button" class="nf-row-arrow nf-arrow-right nf-arrow-hidden" aria-label="Siguiente">&#8250;</button>
           </div>
         </div>
 
@@ -217,6 +255,15 @@
             <span class="hint-key">Esc</span> Volver
           </div>
         </div>
+
+        </div>
+        <!-- /Home clásico -->
+
+        <!-- Home tema Netflix (alternativo, activado desde admin → Sistema → Tema).
+             Se arma 100% por JS (ver renderHomeNetflix() en app.js): banner
+             destacado aleatorio + filas Continuar viendo / Nuevo / Películas /
+             Live TV / Radio / Apps. Vacío hasta que se activa el tema. -->
+        <div class="home-netflix-view" id="home-netflix-view"></div>
 
       </section>
 
@@ -571,7 +618,34 @@
   <script>
     /* ── User login / register / admin ── */
     let _selectedEmoji = '🎬';
-    let _currentUser   = null;  // { username, emoji, prefs, isAdmin?, adminToken? }
+    let _currentUser   = null;  // { username, displayName, emoji, prefs, isAdmin?, adminToken? }
+    let _heartbeatTimer = null;
+
+    /* Identifica ESTE dispositivo/navegador de forma persistente — es lo
+       que permite que recargar la página o el auto-login no cuenten como
+       una conexión nueva contra el límite de dispositivos de la cuenta. */
+    function getDeviceId() {
+      let id = localStorage.getItem('mythos-device-id');
+      if (!id) {
+        id = (crypto.randomUUID ? crypto.randomUUID() : (Date.now().toString(36) + Math.random().toString(36).slice(2)));
+        localStorage.setItem('mythos-device-id', id);
+      }
+      return id;
+    }
+
+    function startHeartbeat(username) {
+      stopHeartbeat();
+      const deviceId = getDeviceId();
+      _heartbeatTimer = setInterval(() => {
+        fetch('/api/users/heartbeat', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, deviceId }),
+        }).catch(() => {}); // sin red -> se reintenta en el próximo ciclo
+      }, 60000);
+    }
+    function stopHeartbeat() {
+      if (_heartbeatTimer) { clearInterval(_heartbeatTimer); _heartbeatTimer = null; }
+    }
 
     /* Admin no tiene "prefs" propias en users.json -> las suyas viven en el
        config global (la misma fuente que admin.html -> Sistema usa) */
@@ -670,6 +744,8 @@
         } catch { errEl.textContent = 'Error de conexión con el servidor'; }
         return;
       }
+      // (r.status 429 en el intento de admin cae acá arriba también,
+      // data.error ya trae el mensaje de "demasiados intentos" listo.)
 
       // ── Login de usuario normal con PIN ──
       if (!/^\d{4}$/.test(pass)) {
@@ -679,26 +755,30 @@
       try {
         const r    = await fetch('/api/users/login', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username, pin: pass }),
+          body: JSON.stringify({ username, pin: pass, deviceId: getDeviceId() }),
         });
         const data = await r.json();
         if (data.ok) {
-          _currentUser = { ...data.user, pin: pass };
+          _currentUser = { ...data.user, pin: pass, token: data.token };
           sessionStorage.setItem('mytv-user', JSON.stringify({ username, pin: pass }));
+          startHeartbeat(username);
           enterApp();
         } else {
           if (data.error === 'pending')       errEl.textContent = '⏳ Tu cuenta está pendiente de aprobación';
           else if (data.error === 'blocked')  errEl.textContent = '🚫 Tu cuenta ha sido bloqueada';
+          else if (data.error === 'device_limit') errEl.textContent = '🚫 ' + (data.message || 'Sesión inválida: demasiados dispositivos conectados');
+          else if (data.error === 'rate_limited') errEl.textContent = '⏳ ' + (data.message || 'Demasiados intentos. Esperá unos minutos.');
           else errEl.textContent = data.error || 'Error al iniciar sesión';
         }
       } catch { errEl.textContent = 'Error de conexión con el servidor'; }
     }
 
     async function doUserRegister() {
-      const username = document.getElementById('user-reg-name').value.trim();
-      const pin      = document.getElementById('user-reg-pin').value.trim();
-      const pin2     = document.getElementById('user-reg-pin2').value.trim();
-      const errEl    = document.getElementById('user-reg-error');
+      const username    = document.getElementById('user-reg-name').value.trim();
+      const displayName = document.getElementById('user-reg-displayname').value.trim();
+      const pin         = document.getElementById('user-reg-pin').value.trim();
+      const pin2        = document.getElementById('user-reg-pin2').value.trim();
+      const errEl       = document.getElementById('user-reg-error');
       errEl.textContent = '';
 
       if (!username || !pin) { errEl.textContent = 'Completa todos los campos'; return; }
@@ -708,7 +788,7 @@
       try {
         const r    = await fetch('/api/users/register', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username, pin, emoji: _selectedEmoji }),
+          body: JSON.stringify({ username, displayName, pin, emoji: _selectedEmoji }),
         });
         const data = await r.json();
         if (data.ok) {
@@ -735,6 +815,15 @@
 
     /* Logout: limpia sesión y vuelve al login */
     function doLogout() {
+      stopHeartbeat();
+      if (_currentUser && _currentUser.username && !_currentUser.isAdmin) {
+        // Fire-and-forget — libera el cupo de dispositivo ya mismo en vez
+        // de esperar a que expire solo por falta de heartbeat (3 min).
+        fetch('/api/users/logout', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: _currentUser.username, deviceId: getDeviceId() }),
+        }).catch(() => {});
+      }
       sessionStorage.removeItem('mytv-user');
       _currentUser = null;
       // Recargar la página es lo más limpio — resetea todo el estado
@@ -767,14 +856,17 @@
           if (session.username && session.pin) {
             const r    = await fetch('/api/users/login', {
               method: 'POST', headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ username: session.username, pin: session.pin }),
+              body: JSON.stringify({ username: session.username, pin: session.pin, deviceId: getDeviceId() }),
             });
             const data = await r.json();
             if (data.ok) {
-              _currentUser = { ...data.user, pin: session.pin };
+              _currentUser = { ...data.user, pin: session.pin, token: data.token };
+              startHeartbeat(session.username);
               enterApp();
               return;
             }
+            // device_limit u otro error -> cae al login manual de abajo
+            // (no forzamos entrar con una sesión que el server rechazó)
           }
         } catch {}
         sessionStorage.removeItem('mytv-user');

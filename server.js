@@ -17,6 +17,13 @@ const http     = require('http');
 const dns      = require('dns');
 const net      = require('net');
 
+// geoip-lite es OPCIONAL — si no está instalado (`npm install geoip-lite`),
+// el registro de logueos sigue funcionando, solo que sin ciudad/país,
+// nada más con la IP. No se cae el server si falta.
+let geoip = null;
+try { geoip = require('geoip-lite'); }
+catch { console.warn('[MythOS TV] geoip-lite no instalado — el historial de logueos guardará solo IP (ejecutá: npm install geoip-lite)'); }
+
 const TMDB_KEY = process.env.TMDB_API_KEY || '';
 
 const app  = express();
@@ -27,6 +34,7 @@ const DATA_DIR  = path.join(__dirname, 'data');
 const CFG_FILE  = path.join(DATA_DIR, 'config.json');
 const AUTH_FILE  = path.join(DATA_DIR, 'auth.json');
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
+const SESSIONS_FILE = path.join(DATA_DIR, 'sessions.json'); // dispositivos conectados por usuario
 const PROGRESS_FILE = path.join(DATA_DIR, 'progress.json');
 
 // ── Ensure data dir exists ───────────────────────────────────────
@@ -89,7 +97,40 @@ function checkAuth(req) {
   return token && token === auth.token;
 }
 
+// Acepta admin (X-Admin-Token / ?token=) O una sesión de usuario válida
+// (X-User-Token / ?token=). checkUserAuth() se define más abajo junto a
+// las sesiones/dispositivos — el hoisting de `function` hace que esté
+// disponible igual desde acá arriba.
+function checkAnyAuth(req) {
+  return checkAuth(req) || !!checkUserAuth(req);
+}
+
+// ── Rate limiting simple en memoria (sin dependencias externas) ──
+// Protege /api/users/login y /api/admin/login de fuerza bruta: un PIN
+// de 4 dígitos son solo 10.000 combinaciones, sin esto se prueban
+// todas en minutos con un script.
+const LOGIN_MAX_ATTEMPTS = 8;
+const LOGIN_WINDOW_MS    = 10 * 60 * 1000; // 10 min
+const loginAttempts = new Map(); // key -> [timestamps de intentos fallidos]
+
+function isRateLimited(key) {
+  const now = Date.now();
+  const arr = (loginAttempts.get(key) || []).filter(t => now - t < LOGIN_WINDOW_MS);
+  loginAttempts.set(key, arr);
+  return arr.length >= LOGIN_MAX_ATTEMPTS;
+}
+function recordFailedAttempt(key) {
+  const arr = loginAttempts.get(key) || [];
+  arr.push(Date.now());
+  loginAttempts.set(key, arr);
+}
+function clearAttempts(key) {
+  loginAttempts.delete(key);
+}
+
 // ── Middleware ───────────────────────────────────────────────────
+app.set('trust proxy', true); // Nginx hace de proxy — sin esto, la IP real del
+                                // cliente se pierde (todos aparecerían como localhost).
 app.use(express.json({ limit: '10mb' }));
 
 // CORS — allow same origin and local network
@@ -101,22 +142,36 @@ app.use((req, res, next) => {
   next();
 });
 
-// ── PUBLIC: Get full config (all devices read this) ──────────────
+// ── PROTECTED: Get full config (requiere sesión de usuario o admin) ──
 app.get('/api/config', (req, res) => {
+  if (!checkAnyAuth(req)) return res.status(403).json({ error: 'No autorizado' });
+  // Nunca cachear: los cambios de admin (tema, catálogo, etc.) deben
+  // reflejarse al instante en todos los dispositivos conectados.
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  res.setHeader('Pragma', 'no-cache');
   res.json(loadConfig());
 });
 
 // ── PUBLIC: Admin login ──────────────────────────────────────────
 app.post('/api/admin/login', (req, res) => {
   const { user, pass } = req.body;
+
+  const ip    = getClientIp(req);
+  const rlKey = `admin:${ip}`;
+  if (isRateLimited(rlKey)) {
+    return res.status(429).json({ ok: false, error: 'Demasiados intentos fallidos. Esperá unos minutos e intentá de nuevo.' });
+  }
+
   const auth = loadAuth();
 
   if (user === auth.user && hashPass(pass) === auth.passHash) {
+    clearAttempts(rlKey);
     // Generate session token (valid until server restart — fine for home use)
     if (!auth.token) auth.token = crypto.randomBytes(32).toString('hex');
     fs.writeFileSync(AUTH_FILE, JSON.stringify(auth, null, 2));
     return res.json({ ok: true, token: auth.token });
   }
+  recordFailedAttempt(rlKey);
   res.status(401).json({ ok: false, error: 'Credenciales incorrectas' });
 });
 
@@ -163,12 +218,13 @@ app.get('/api/admin/fetch-m3u', async (req, res) => {
   }
 });
 
-// ── PUBLIC: Proxy de stream (resuelve CORS para .mp4/.m3u8 externos) ──
-// NOTA: NO usa checkAuth — lo llama el player de cualquier TV/dispositivo,
-// no solo el panel admin. No hay whitelist de hosts (jala cualquier URL
-// pública de tus listas M3U); la única protección es bloquear IPs
-// privadas/internas para que el proxy no se pueda usar contra tu propia
-// red interna o el endpoint de metadata de la nube (169.254.169.254, etc).
+// ── PROTECTED: Proxy de stream (resuelve CORS para .mp4/.m3u8 externos) ──
+// Requiere checkAnyAuth (token de admin o de sesión de usuario, vía
+// ?token= ya que lo abre directo el <video>/hls.js, no solo fetch()).
+// Además, no hay whitelist de hosts (jala cualquier URL pública de tus
+// listas M3U); la protección adicional es bloquear IPs privadas/internas
+// para que el proxy no se pueda usar contra tu propia red interna o el
+// endpoint de metadata de la nube (169.254.169.254, etc).
 function isPrivateIP(ip) {
   if (net.isIPv4(ip)) {
     const p = ip.split('.').map(Number);
@@ -219,7 +275,14 @@ function proxyStream(targetUrl, req, res, redirectsLeft) {
     };
     if (req.headers.range) headers['Range'] = req.headers.range;
 
-    const upstreamReq = proto.get(targetUrl, { headers, timeout: 15000 }, (upstream) => {
+    // rejectUnauthorized:false — muchos servidores IPTV gratuitos usan
+    // certificados autofirmados/vencidos/con hostname mal armado. VLC y
+    // ffmpeg no validan esto por default, así que "en VLC anda" pero acá
+    // Node rechazaba la conexión antes de llegar a pedir nada. El check
+    // de hostAllowed() ya filtró IPs privadas arriba, así que esto no
+    // abre SSRF — solo deja de exigir un certificado válido para hosts
+    // públicos ya aprobados.
+    const upstreamReq = proto.get(targetUrl, { headers, timeout: 15000, rejectUnauthorized: false }, (upstream) => {
       // Seguir redirecciones (muy común en object storage / CDN)
       if ([301, 302, 303, 307, 308].includes(upstream.statusCode) && upstream.headers.location && redirectsLeft > 0) {
         upstream.resume(); // descartar body del redirect
@@ -229,6 +292,7 @@ function proxyStream(targetUrl, req, res, redirectsLeft) {
 
       res.statusCode = upstream.statusCode;
       res.setHeader('Content-Type', upstream.headers['content-type'] || 'application/octet-stream');
+      res.setHeader('Access-Control-Allow-Origin', '*');
       if (upstream.headers['content-length']) res.setHeader('Content-Length', upstream.headers['content-length']);
       if (upstream.headers['content-range'])  res.setHeader('Content-Range', upstream.headers['content-range']);
       if (upstream.headers['accept-ranges'])  res.setHeader('Accept-Ranges', upstream.headers['accept-ranges']);
@@ -249,23 +313,49 @@ function proxyStream(targetUrl, req, res, redirectsLeft) {
 }
 
 app.get('/api/proxy-stream', (req, res) => {
+  if (!checkAnyAuth(req)) return res.status(403).json({ error: 'No autorizado' });
   const url = req.query.url;
   if (!url) return res.status(400).json({ error: 'url requerida' });
   proxyStream(url, req, res, 3);
 });
 
 // ── PUBLIC: Proxy reescritor de manifiestos M3U8 ────────────────
-// Resuelve el problema de CORS en streams HLS de servidores externos:
-// descarga el manifiesto .m3u8, reescribe todas las URLs de segmentos
-// .ts y sub-manifiestos para que pasen por /api/proxy-stream, y
-// devuelve el manifiesto modificado al browser. Así hls.js nunca
-// contacta el origen directamente y CORS deja de ser un problema.
+// Resuelve el problema de CORS/mixed-content en streams HLS externos:
+// descarga el manifiesto .m3u8, reescribe TODAS las URLs que contiene
+// (segmentos .ts, sub-manifiestos, y también las URI embebidas en tags
+// como EXT-X-MAP/EXT-X-KEY/EXT-X-MEDIA/EXT-X-I-FRAME-STREAM-INF) para
+// que pasen por /api/proxy-stream o /api/proxy-m3u8, y devuelve el
+// manifiesto modificado al browser. Así hls.js nunca contacta el
+// origen directamente y ni CORS ni mixed-content son un problema.
+//
+// FIX AGRESIVO (jul 2026): la versión anterior solo reescribía líneas
+// "sueltas" (URI en su propia línea) y dejaba intacto cualquier tag que
+// empezara con "#", incluyendo los que traen su propia URI embebida
+// como atributo (EXT-X-MAP con el init segment de streams fMP4,
+// EXT-X-KEY con la clave de cifrado, EXT-X-MEDIA con pistas de audio
+// alterna, EXT-X-I-FRAME-STREAM-INF). Esas URIs quedaban apuntando al
+// origen http:// original → el navegador las pedía directo desde la
+// página https:// → bloqueadas por mixed-content → el manifiesto
+// cargaba pero el video nunca arrancaba. Ahora se reescriben también.
 //
 // Uso: /api/proxy-m3u8?url=<url_del_manifiesto>
 // No toca el flujo existente de proxy-stream ni el player directo.
 app.get('/api/proxy-m3u8', (req, res) => {
+  if (!checkAnyAuth(req)) return res.status(403).json({ error: 'No autorizado' });
   const url = req.query.url;
   if (!url) return res.status(400).json({ error: 'url requerida' });
+
+  // El token viaja en la query (no en headers, porque el manifiesto lo
+  // consume hls.js/el navegador directo). Hay que propagarlo a TODAS las
+  // URLs reescritas dentro del manifiesto (segmentos, sub-manifiestos,
+  // init segments, etc.) o esas llamadas siguientes van a rebotar con 403.
+  const authToken  = req.query.token ? String(req.query.token) : '';
+  const tokenQS    = authToken ? `&token=${encodeURIComponent(authToken)}` : '';
+
+  // Tope de redirecciones (evita loops infinitos en servidores mal
+  // configurados que redirigen a sí mismos).
+  const depth = parseInt(req.query._depth, 10) || 0;
+  if (depth > 5) return res.status(508).json({ error: 'demasiadas redirecciones' });
 
   let parsed;
   try { parsed = new URL(url); }
@@ -281,12 +371,14 @@ app.get('/api/proxy-m3u8', (req, res) => {
       'Connection': 'keep-alive',
     };
 
-    const upstreamReq = proto.get(url, { headers, timeout: 15000 }, (upstream) => {
+    // Mismo motivo que en proxyStream: certificados autofirmados/vencidos
+    // son la norma en estos servidores de IPTV gratuito, no la excepción.
+    const upstreamReq = proto.get(url, { headers, timeout: 15000, rejectUnauthorized: false }, (upstream) => {
       // Seguir redirecciones
       if ([301,302,303,307,308].includes(upstream.statusCode) && upstream.headers.location) {
         upstream.resume();
         const next = new URL(upstream.headers.location, url).toString();
-        return res.redirect(`/api/proxy-m3u8?url=${encodeURIComponent(next)}`);
+        return res.redirect(`/api/proxy-m3u8?url=${encodeURIComponent(next)}&_depth=${depth + 1}${tokenQS}`);
       }
 
       if (upstream.statusCode !== 200) {
@@ -301,21 +393,38 @@ app.get('/api/proxy-m3u8', (req, res) => {
         // Base URL para resolver rutas relativas dentro del manifiesto
         const base = url.substring(0, url.lastIndexOf('/') + 1);
 
+        // Resuelve una URI (absoluta o relativa) contra `base` y decide
+        // si pasa por proxy-m3u8 (si es otro manifiesto) o proxy-stream
+        // (segmento/clave/init-segment/binario).
+        const proxyFor = (rawUri) => {
+          let abs;
+          try { abs = new URL(rawUri, base).toString(); }
+          catch { return null; }
+          return /\.m3u8(\?|#|$)/i.test(abs)
+            ? `/api/proxy-m3u8?url=${encodeURIComponent(abs)}${tokenQS}`
+            : `/api/proxy-stream?url=${encodeURIComponent(abs)}${tokenQS}`;
+        };
+
         const rewritten = body.split('\n').map(line => {
           const trimmed = line.trim();
-          if (!trimmed || trimmed.startsWith('#')) return line; // comentario/tag → intacto
+          if (!trimmed) return line;
 
-          // Resolver URL absoluta o relativa
-          let segUrl;
-          try { segUrl = new URL(trimmed, base).toString(); }
-          catch { return line; } // si no parsea, dejarlo tal cual
-
-          // Sub-manifiesto (.m3u8) → pasar por proxy-m3u8 para que también reescriba
-          if (/\.m3u8(\?|#|$)/i.test(segUrl)) {
-            return `/api/proxy-m3u8?url=${encodeURIComponent(segUrl)}`;
+          if (trimmed.startsWith('#')) {
+            // Tags que embeben su propia URI como atributo (init segment
+            // fMP4, clave de cifrado, pista de audio alterna, i-frame
+            // playlist, session data/key) también deben reescribirse, o
+            // el navegador las pide directo al origen y rompe el stream.
+            const m = trimmed.match(/URI="([^"]+)"/);
+            if (m) {
+              const proxied = proxyFor(m[1]);
+              if (proxied) return line.replace(m[0], `URI="${proxied}"`);
+            }
+            return line; // otros tags/comentarios sin URI → intactos
           }
-          // Segmento .ts u otro recurso → pasar por proxy-stream
-          return `/api/proxy-stream?url=${encodeURIComponent(segUrl)}`;
+
+          // Línea suelta: URL de segmento .ts o de sub-manifiesto .m3u8
+          const proxied = proxyFor(trimmed);
+          return proxied || line;
         }).join('\n');
 
         res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
@@ -340,6 +449,7 @@ app.get('/api/proxy-m3u8', (req, res) => {
 const { spawn } = require('child_process');
 
 app.get('/api/transcode', (req, res) => {
+  if (!checkAnyAuth(req)) return res.status(403).json({ error: 'No autorizado' });
   const url = req.query.url;
   if (!url) return res.status(400).json({ error: 'url requerida' });
 
@@ -439,6 +549,76 @@ function hashPin(pin) {
 }
 
 /* ══════════════════════════════════════════════════════════════
+   SESIONES / DISPOSITIVOS CONECTADOS
+   Forma: { [username]: [ {deviceId, ip, city, country, loginAt, lastSeen} ] }
+   Un "dispositivo" se identifica por un deviceId persistente que genera
+   el cliente (localStorage) — así, recargar la página o el auto-login
+   no cuenta como una conexión nueva, solo refresca la existente.
+   Una sesión sin heartbeat en SESSION_TTL_MS se considera desconectada
+   y no cuenta contra el límite (se limpia sola, sin necesidad de logout
+   explícito — útil si el usuario cierra el navegador de golpe).
+   ══════════════════════════════════════════════════════════════ */
+const SESSION_TTL_MS      = 3 * 60 * 1000; // 3 min sin heartbeat = fuera
+const DEFAULT_MAX_DEVICES = 2;
+const LOGIN_HISTORY_MAX   = 20;
+
+function loadSessions() {
+  try {
+    if (fs.existsSync(SESSIONS_FILE)) return JSON.parse(fs.readFileSync(SESSIONS_FILE, 'utf8'));
+  } catch {}
+  return {};
+}
+function saveSessions(data) {
+  fs.writeFileSync(SESSIONS_FILE, JSON.stringify(data, null, 2), 'utf8');
+}
+
+function getClientIp(req) {
+  const fwd = req.headers['x-forwarded-for'];
+  if (fwd) return String(fwd).split(',')[0].trim();
+  return req.ip || req.socket?.remoteAddress || '';
+}
+
+function lookupGeo(ip) {
+  if (!geoip || !ip) return { city: null, country: null };
+  try {
+    const clean = ip.replace(/^::ffff:/, ''); // IPv4 mapeada sobre IPv6
+    const g = geoip.lookup(clean);
+    if (!g) return { city: null, country: null };
+    return { city: g.city || null, country: g.country || null };
+  } catch { return { city: null, country: null }; }
+}
+
+// Sesiones activas de un usuario (solo las que tuvieron heartbeat
+// reciente) — muta el array in-place descartando las vencidas.
+function getActiveSessions(all, uname) {
+  const now  = Date.now();
+  const list = (all[uname] || []).filter(s => now - (s.lastSeen || 0) < SESSION_TTL_MS);
+  all[uname] = list;
+  return list;
+}
+
+// Busca un token de sesión de USUARIO (no admin) entre todos los
+// dispositivos conectados de todos los usuarios. Devuelve
+// {username, deviceId} si es válido y sigue vivo (dentro de
+// SESSION_TTL_MS), o null. Usado por checkAnyAuth() para proteger
+// /api/config, /api/proxy-stream, /api/proxy-m3u8, /api/transcode
+// y /api/progress sin depender solo del token de admin.
+function checkUserAuth(req) {
+  const token = req.headers['x-user-token'] || req.query.token;
+  if (!token) return null;
+  const allSess = loadSessions();
+  const now = Date.now();
+  for (const uname of Object.keys(allSess)) {
+    const found = (allSess[uname] || []).find(s => s.token === token);
+    if (found) {
+      if (now - (found.lastSeen || 0) >= SESSION_TTL_MS) return null;
+      return { username: uname, deviceId: found.deviceId };
+    }
+  }
+  return null;
+}
+
+/* ══════════════════════════════════════════════════════════════
    PROGRESS — "Continuar viendo", por usuario
    Forma: { [username]: { [movieName]: {movieName,url,position,duration,timestamp} } }
    ══════════════════════════════════════════════════════════════ */
@@ -454,34 +634,67 @@ function saveProgress(data) {
   fs.writeFileSync(PROGRESS_FILE, JSON.stringify(data, null, 2), 'utf8');
 }
 
-// PUBLIC: progreso de un usuario, ordenado del más reciente al más viejo
+// PUBLIC: progreso de un usuario, ordenado del más reciente al más viejo.
+// Las películas marcadas "finished" (ya vistas) NO se devuelven — así
+// nunca vuelven a aparecer en "Continuar viendo".
 app.get('/api/progress/:username', (req, res) => {
   const username = String(req.params.username || '').toLowerCase();
   if (!username) return res.status(400).json({ error: 'Usuario requerido' });
+
+  // Solo el propio usuario (por token) o el admin pueden leer este progreso.
+  const isAdmin  = checkAuth(req);
+  const userAuth = checkUserAuth(req);
+  if (!isAdmin && (!userAuth || userAuth.username !== username)) {
+    return res.status(403).json({ error: 'No autorizado' });
+  }
+
   const all     = loadProgress();
-  const entries = Object.values(all[username] || {});
+  const entries = Object.values(all[username] || {}).filter(e => !e.finished);
   entries.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
   res.json({ ok: true, progress: entries });
 });
 
-// PUBLIC: guardar/actualizar progreso de una película para un usuario
-// Al llegar a 95% se considera vista y se elimina de "Continuar viendo"
+// PUBLIC: guardar/actualizar progreso de una película para un usuario.
+// Al llegar al 90% se marca "finished" de forma persistente (no solo
+// se borra) — así, aunque los créditos sigan corriendo y el usuario
+// cierre antes de llegar al final real del archivo, la película no
+// vuelve a aparecer en "Continuar viendo". La marca solo se levanta
+// si el usuario arranca de nuevo genuinamente desde el principio
+// (ratio <= 5%), permitiendo un rewatch real.
+const WATCHED_THRESHOLD = 0.90;
+const REWATCH_RESET_THRESHOLD = 0.05;
+
 app.post('/api/progress', (req, res) => {
   const { username, movieName, url, position, duration } = req.body || {};
   if (!username || !movieName) return res.status(400).json({ error: 'Usuario y película requeridos' });
   const uname = String(username).toLowerCase();
 
+  // Solo el propio usuario (por token) o el admin pueden guardar este progreso.
+  const isAdmin  = checkAuth(req);
+  const userAuth = checkUserAuth(req);
+  if (!isAdmin && (!userAuth || userAuth.username !== uname)) {
+    return res.status(403).json({ error: 'No autorizado' });
+  }
+
   const all = loadProgress();
   if (!all[uname]) all[uname] = {};
 
-  const dur   = Number(duration) || 0;
-  const pos   = Number(position) || 0;
-  const ratio = dur > 0 ? pos / dur : 0;
+  const dur      = Number(duration) || 0;
+  const pos      = Number(position) || 0;
+  const ratio    = dur > 0 ? pos / dur : 0;
+  const existing = all[uname][movieName];
 
-  if (ratio >= 0.95) {
-    delete all[uname][movieName];
+  // Ya estaba marcada como vista y esto no es un rewatch real desde
+  // el principio (ej. el usuario adelantó unos segundos sin querer)
+  // — se ignora, no debe volver a aparecer en Continuar viendo.
+  if (existing && existing.finished && ratio > REWATCH_RESET_THRESHOLD) {
+    return res.json({ ok: true });
+  }
+
+  if (ratio >= WATCHED_THRESHOLD) {
+    all[uname][movieName] = { movieName, url: url || '', position: pos, duration: dur, timestamp: Date.now(), finished: true };
   } else {
-    all[uname][movieName] = { movieName, url: url || '', position: pos, duration: dur, timestamp: Date.now() };
+    all[uname][movieName] = { movieName, url: url || '', position: pos, duration: dur, timestamp: Date.now(), finished: false };
   }
 
   saveProgress(all);
@@ -490,7 +703,7 @@ app.post('/api/progress', (req, res) => {
 
 // PUBLIC: registro de nuevo usuario (queda pendiente)
 app.post('/api/users/register', (req, res) => {
-  const { username, pin, emoji } = req.body;
+  const { username, pin, emoji, displayName } = req.body;
   if (!username || !pin) return res.status(400).json({ error: 'Nombre y PIN requeridos' });
   if (!/^\d{4}$/.test(String(pin))) return res.status(400).json({ error: 'PIN debe ser 4 dígitos' });
 
@@ -499,12 +712,15 @@ app.post('/api/users/register', (req, res) => {
   if (nameTaken) return res.status(409).json({ error: 'Ese nombre ya está en uso' });
 
   const user = {
-    id:        crypto.randomBytes(8).toString('hex'),
-    username:  username.trim(),
-    emoji:     emoji || '🎬',
-    pinHash:   hashPin(pin),
-    status:    'pending',   // pending | active | blocked
-    createdAt: new Date().toISOString(),
+    id:          crypto.randomBytes(8).toString('hex'),
+    username:    username.trim(),                          // handle de acceso, único
+    displayName: (displayName || username).trim(),         // nombre para mostrar en el sistema
+    emoji:       emoji || '🎬',
+    pinHash:     hashPin(pin),
+    status:      'pending',   // pending | active | blocked
+    createdAt:   new Date().toISOString(),
+    maxDevices:  DEFAULT_MAX_DEVICES,   // el admin lo puede ajustar por usuario
+    loginHistory: [],                   // últimos accesos: {timestamp, ip, city, country}
     prefs: {
       wallpaper:   'default',
       timeFormat:  '24h',
@@ -517,21 +733,120 @@ app.post('/api/users/register', (req, res) => {
   res.json({ ok: true, id: user.id });
 });
 
-// PUBLIC: login con nombre + PIN
+// PUBLIC: login con nombre + PIN.
+// deviceId lo genera y persiste el cliente (localStorage) — identifica
+// "este dispositivo" a través de recargas/reconexiones, sin lo cual
+// cada auto-login al recargar la página contaría como una conexión
+// nueva y agotaría el límite de dispositivos enseguida.
 app.post('/api/users/login', (req, res) => {
-  const { username, pin } = req.body;
+  const { username, pin, deviceId } = req.body;
   if (!username || !pin) return res.status(400).json({ error: 'Nombre y PIN requeridos' });
+
+  // Rate limit por IP+usuario — 8 intentos fallidos / 10 min. Un PIN de
+  // 4 dígitos son solo 10.000 combinaciones, sin esto se prueban todas
+  // en minutos con un script.
+  const ip    = getClientIp(req);
+  const rlKey = `user:${ip}:${String(username).toLowerCase()}`;
+  if (isRateLimited(rlKey)) {
+    return res.status(429).json({
+      error: 'rate_limited',
+      message: 'Demasiados intentos fallidos. Esperá unos minutos e intentá de nuevo.',
+    });
+  }
 
   const users = loadUsers();
   const user  = users.find(u => u.username.toLowerCase() === username.toLowerCase());
-  if (!user) return res.status(401).json({ error: 'Usuario no encontrado' });
-  if (user.pinHash !== hashPin(pin)) return res.status(401).json({ error: 'PIN incorrecto' });
+  if (!user) { recordFailedAttempt(rlKey); return res.status(401).json({ error: 'Usuario no encontrado' }); }
+  if (user.pinHash !== hashPin(pin)) { recordFailedAttempt(rlKey); return res.status(401).json({ error: 'PIN incorrecto' }); }
   if (user.status === 'pending')  return res.status(403).json({ error: 'pending' });
   if (user.status === 'blocked')  return res.status(403).json({ error: 'blocked' });
 
+  clearAttempts(rlKey); // login correcto -> resetear el contador
+
+  const uname   = user.username.toLowerCase();
+  const allSess = loadSessions();
+  const active  = getActiveSessions(allSess, uname);
+  const maxDev  = user.maxDevices || DEFAULT_MAX_DEVICES;
+  const now     = Date.now();
+
+  // Token de sesión: se manda en cada llamada a la API (query ?token=
+  // para los <video>/hls.js que no pueden mandar headers, o header
+  // X-User-Token para fetch()). Sin esto, /api/config, los proxies de
+  // streaming y /api/progress quedaban abiertos a cualquiera.
+  let sessionToken;
+  const existing = deviceId ? active.find(s => s.deviceId === deviceId) : null;
+  if (existing) {
+    // Mismo dispositivo reconectando (recarga, auto-login) — no cuenta
+    // como uno nuevo, solo se refresca. Reusa el token si ya tenía uno.
+    existing.lastSeen = now;
+    if (!existing.token) existing.token = crypto.randomBytes(24).toString('hex');
+    sessionToken = existing.token;
+  } else if (active.length >= maxDev) {
+    // Límite alcanzado — se rechaza el login, no se desconecta a nadie.
+    return res.status(403).json({
+      error: 'device_limit',
+      message: `Sesión inválida: se alcanzó el máximo de ${maxDev} dispositivo(s) conectados para esta cuenta.`,
+      maxDevices: maxDev,
+    });
+  } else if (deviceId) {
+    const geo = lookupGeo(ip);
+    sessionToken = crypto.randomBytes(24).toString('hex');
+    active.push({ deviceId, token: sessionToken, ip, city: geo.city, country: geo.country, loginAt: now, lastSeen: now });
+
+    // Registrar en el historial de logueos del usuario (persistente,
+    // separado de las sesiones activas — esto NUNCA se borra solo).
+    if (!Array.isArray(user.loginHistory)) user.loginHistory = [];
+    user.loginHistory.unshift({ timestamp: now, ip, city: geo.city, country: geo.country });
+    user.loginHistory = user.loginHistory.slice(0, LOGIN_HISTORY_MAX);
+    saveUsers(users);
+  } else {
+    // Sin deviceId no se puede rastrear como "dispositivo" para el
+    // límite, pero igual se entrega un token de sesión efímero (no
+    // persiste entre reinicios del server) para las llamadas a la API.
+    sessionToken = crypto.randomBytes(24).toString('hex');
+  }
+  allSess[uname] = active;
+  saveSessions(allSess);
+
   // Devolver perfil sin el hash
   const { pinHash: _, ...safe } = user;
-  res.json({ ok: true, user: safe });
+  res.json({ ok: true, user: safe, token: sessionToken, activeDevices: active.length, maxDevices: maxDev });
+});
+
+// PUBLIC: heartbeat — mantiene viva la "conexión" de este dispositivo.
+// El cliente lo llama cada ~60s mientras la app está abierta; si deja
+// de llamarlo (cerró el navegador de golpe, se quedó sin red) la sesión
+// expira sola a los SESSION_TTL_MS y libera el cupo sin intervención.
+app.post('/api/users/heartbeat', (req, res) => {
+  const { username, deviceId } = req.body;
+  if (!username || !deviceId) return res.status(400).json({ error: 'Datos requeridos' });
+  const uname   = String(username).toLowerCase();
+  const allSess = loadSessions();
+  const active  = getActiveSessions(allSess, uname);
+  const session = active.find(s => s.deviceId === deviceId);
+  if (!session) {
+    // La sesión ya no existe (expiró o nunca se registró) — el cliente
+    // debería re-loguearse para volver a contar como conectado.
+    allSess[uname] = active;
+    saveSessions(allSess);
+    return res.json({ ok: false, error: 'session_expired' });
+  }
+  session.lastSeen = Date.now();
+  allSess[uname] = active;
+  saveSessions(allSess);
+  res.json({ ok: true });
+});
+
+// PUBLIC: logout explícito — libera el cupo de dispositivo al instante
+// en vez de esperar a que expire el heartbeat.
+app.post('/api/users/logout', (req, res) => {
+  const { username, deviceId } = req.body;
+  if (!username) return res.status(400).json({ error: 'Usuario requerido' });
+  const uname   = String(username).toLowerCase();
+  const allSess = loadSessions();
+  allSess[uname] = (allSess[uname] || []).filter(s => s.deviceId !== deviceId);
+  saveSessions(allSess);
+  res.json({ ok: true });
 });
 
 // PUBLIC: guardar prefs de un usuario (autenticado con su PIN)
@@ -555,6 +870,52 @@ app.get('/api/admin/users', (req, res) => {
   if (!checkAuth(req)) return res.status(403).json({ error: 'No autorizado' });
   const users = loadUsers().map(({ pinHash: _, ...u }) => u);
   res.json(users);
+});
+
+// PROTECTED: crear usuario directo desde el admin (queda 'active' de una,
+// no pasa por 'pending' como el auto-registro público)
+app.post('/api/admin/users/create', (req, res) => {
+  if (!checkAuth(req)) return res.status(403).json({ error: 'No autorizado' });
+  const { username, pin, avatarColor, displayName, maxDevices } = req.body || {};
+  if (!username || !pin) return res.status(400).json({ error: 'Nombre y PIN requeridos' });
+  if (!/^\d{4}$/.test(String(pin))) return res.status(400).json({ error: 'PIN debe ser 4 dígitos' });
+
+  const users = loadUsers();
+  const nameTaken = users.some(u => u.username.toLowerCase() === username.trim().toLowerCase());
+  if (nameTaken) return res.status(409).json({ error: 'Ese nombre ya está en uso' });
+
+  let devices = DEFAULT_MAX_DEVICES;
+  if (maxDevices !== undefined) {
+    const n = parseInt(maxDevices, 10);
+    if (!Number.isFinite(n) || n < 1) return res.status(400).json({ error: 'maxDevices debe ser un número mayor a 0' });
+    devices = n;
+  }
+
+  const VALID_COLORS = ['purple','cyan','orange','green','pink','blue','red','yellow'];
+  const color = VALID_COLORS.includes(avatarColor) ? avatarColor : 'purple';
+
+  const user = {
+    id:          crypto.randomBytes(8).toString('hex'),
+    username:    username.trim(),
+    displayName: (displayName || username).trim(),
+    emoji:       '👤',           // fallback solo por compatibilidad con u.emoji en otras vistas
+    avatarColor: color,          // avatar real: iniciales sobre este color
+    pinHash:     hashPin(pin),
+    status:      'active',   // creado por el admin -> activo directo, sin pasar por pending
+    createdAt:   new Date().toISOString(),
+    maxDevices:  devices,
+    loginHistory: [],
+    prefs: {
+      wallpaper:   'default',
+      timeFormat:  '24h',
+      timezone:    'America/Costa_Rica',
+      greeting:    'auto',
+    },
+  };
+  users.push(user);
+  saveUsers(users);
+  const { pinHash: _, ...safe } = user;
+  res.json({ ok: true, user: safe });
 });
 
 // PROTECTED: aprobar usuario
@@ -588,6 +949,26 @@ app.delete('/api/admin/users/:id', (req, res) => {
   if (users.length === before) return res.status(404).json({ error: 'Usuario no encontrado' });
   saveUsers(users);
   res.json({ ok: true });
+});
+
+// PROTECTED: editar nombre para mostrar / avatar / límite de dispositivos
+app.post('/api/admin/users/:id/update', (req, res) => {
+  if (!checkAuth(req)) return res.status(403).json({ error: 'No autorizado' });
+  const users = loadUsers();
+  const user  = users.find(u => u.id === req.params.id);
+  if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
+
+  const { displayName, emoji, maxDevices } = req.body || {};
+  if (typeof displayName === 'string' && displayName.trim()) user.displayName = displayName.trim();
+  if (typeof emoji === 'string' && emoji.trim()) user.emoji = emoji.trim();
+  if (maxDevices !== undefined) {
+    const n = parseInt(maxDevices, 10);
+    if (!Number.isFinite(n) || n < 1) return res.status(400).json({ error: 'maxDevices debe ser un número mayor a 0' });
+    user.maxDevices = n;
+  }
+  saveUsers(users);
+  const { pinHash: _, ...safe } = user;
+  res.json({ ok: true, user: safe });
 });
 
 // PROTECTED: reset PIN (admin genera PIN temporal de 4 dígitos)
