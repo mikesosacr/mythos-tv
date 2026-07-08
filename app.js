@@ -163,6 +163,14 @@ function applyConfig(cfg) {
   state.movies       = groupMovies(cfg.movies || []);
   state.radio        = cfg.radio        || [];
   applyTheme(cfg.theme || 'default');
+  // FIX (jul 2026): injectAdminTile() agrega el tile "adminpanel" a
+  // state.apps, pero antes se llamaba recién en el render del escritorio
+  // (línea ~422), DESPUÉS de este renderNfTopnav() — por eso "Panel Admin"
+  // nunca llegaba a tiempo para aparecer en el dropdown "Más" del topnav,
+  // aunque sí se veía el tile en el escritorio y el badge de la topbar.
+  // injectAdminTile() ya es idempotente (chequea alreadyHas), así que
+  // llamarla acá también, más temprano, es seguro.
+  injectAdminTile();
   renderNfTopnav();
 }
 
@@ -318,10 +326,10 @@ function rerenderCurrentScreenForTheme() {
 function startThemePolling() {
   setInterval(async () => {
     try {
-      const res = await fetch(`${API}/config`, { cache: 'no-store', headers: getAuthHeaders() });
+      const res = await fetch(`${API}/theme`, { cache: 'no-store', headers: getAuthHeaders() });
       if (!res.ok) return;
-      const cfg = await res.json();
-      applyTheme(cfg.theme || 'default');
+      const data = await res.json();
+      applyTheme(data.theme || 'default');
     } catch { /* sin red — se reintenta en el siguiente ciclo */ }
   }, 4000);
 }
@@ -544,7 +552,7 @@ function renderAppGrid() {
       <div class="tile-bg" aria-hidden="true"></div>
       ${app.badge ? `<span class="tile-badge">${app.badge}</span>` : ''}
       <div class="tile-icon">${app.logo
-        ? `<img src="${app.logo}" alt="" data-fallback="${app.emoji || '🚀'}" onerror="handleImgError(this)" />`
+        ? `<img src="${app.logo}" alt="" loading="lazy" decoding="async" data-fallback="${app.emoji || '🚀'}" onerror="handleImgError(this)" />`
         : app.emoji}</div>
       <div class="tile-label">${app.label}</div>
       ${app.sublabel ? `<div class="tile-sublabel">${app.sublabel}</div>` : ''}
@@ -749,7 +757,7 @@ function playRadioFromHome(station) {
 
 function homeNfPosterCard(rowType, idx, imgUrl, fallbackEmoji, title, contain) {
   const img = imgUrl
-    ? `<img class="${contain ? 'nf-card-poster-contain' : 'nf-card-poster'}" src="${imgUrl}" alt="" data-fallback="${fallbackEmoji || '🎬'}" onerror="handleImgError(this)" />`
+    ? `<img class="${contain ? 'nf-card-poster-contain' : 'nf-card-poster'}" src="${imgUrl}" alt="" loading="lazy" decoding="async" data-fallback="${fallbackEmoji || '🎬'}" onerror="handleImgError(this)" />`
     : `<div class="nf-card-fallback">${fallbackEmoji || '🎬'}</div>`;
   return `
     <div class="nf-card" tabindex="-1" data-row-type="${rowType}" data-idx="${idx}">
@@ -855,7 +863,7 @@ function renderHomeNetflix() {
       const pct = p.duration > 0 ? Math.min(100, Math.round((p.position / p.duration) * 100)) : 0;
       const accent = CW_ACCENTS[i % CW_ACCENTS.length];
       const frameHtml = m.poster
-        ? `<img src="${m.poster}" alt="" data-fallback="${m.emoji || '🎬'}" onerror="handleImgError(this)" />`
+        ? `<img src="${m.poster}" alt="" loading="lazy" decoding="async" data-fallback="${m.emoji || '🎬'}" onerror="handleImgError(this)" />`
         : `<div class="cw-frame-fallback">${m.emoji || '🎬'}</div>`;
       return `
         <div class="nf-card cw-card" tabindex="-1" data-row-type="continue" data-idx="${i}">
@@ -897,7 +905,7 @@ function renderHomeNetflix() {
       <div class="home-radio-tile" tabindex="-1" data-row-type="radio" data-idx="${i}">
         <div class="home-radio-disc">
           ${s.logo
-            ? `<img src="${s.logo}" alt="" data-fallback="${s.emoji || '📻'}" onerror="handleImgError(this)" />`
+            ? `<img src="${s.logo}" alt="" loading="lazy" decoding="async" data-fallback="${s.emoji || '📻'}" onerror="handleImgError(this)" />`
             : (s.emoji || '📻')}
         </div>
         <div class="home-radio-name">${s.name || ''}</div>
@@ -920,7 +928,7 @@ function renderHomeNetflix() {
     const { continueItems, newItems, moviesRow, livetvRow, radioRow, newItemsAll } = state._homeNfData;
     const idx = parseInt(card.dataset.idx, 10);
     switch (card.dataset.rowType) {
-      case 'continue':    { const m = continueItems[idx]?.m; if (m) openDetailModal('movie', m); break; }
+      case 'continue':    { const _ci = continueItems[idx]; const m = _ci ? _ci.m : undefined; if (m) openDetailModal('movie', m); break; }
       case 'new':         { const m = newItems[idx];         if (m) openDetailModal('movie', m); break; }
       case 'movies':      { const m = moviesRow[idx];        if (m) openDetailModal('movie', m); break; }
       case 'livetv':      { const c = livetvRow[idx];        if (c) openDetailModal('livetv', c); break; }
@@ -1084,7 +1092,8 @@ function handleHomeNetflixKey(key) {
       playSnd('enter');
       if (state._homeNfRow === -2) {
         if (state._homeNfDropdownIdx >= 0) {
-          getTopnavDropdownItems()[state._homeNfDropdownIdx]?.click();
+          var _tnDDitem = getTopnavDropdownItems()[state._homeNfDropdownIdx];
+          if (_tnDDitem) _tnDDitem.click();
         } else {
           const el = getTopnavItems()[state._homeNfTopIdx || 0];
           if (el && el.id === 'nf-topnav-more-btn') focusTopnavDropdown(0);
@@ -1093,7 +1102,8 @@ function handleHomeNetflixKey(key) {
       } else if (state._homeNfRow === -1) {
         (state._homeNfHeroBtn === 'info' ? document.getElementById('home-hero-info') : document.getElementById('home-hero-play'))?.click();
       } else {
-        getHomeNfCards(rows[state._homeNfRow])[state._homeNfCol]?.click();
+        var _nfCard = getHomeNfCards(rows[state._homeNfRow])[state._homeNfCol];
+        if (_nfCard) _nfCard.click();
       }
       break;
   }
@@ -1173,7 +1183,7 @@ function renderContinueWatching() {
     card.setAttribute('tabindex', '-1');
     card.dataset.idx = i;
     const frameHtml = m.poster
-      ? `<img src="${m.poster}" alt="" onerror="handleImgError(this)" data-fallback="${m.emoji || '🎬'}" />`
+      ? `<img src="${m.poster}" alt="" loading="lazy" decoding="async" onerror="handleImgError(this)" data-fallback="${m.emoji || '🎬'}" />`
       : `<div class="cw-frame-fallback">${m.emoji || '🎬'}</div>`;
     card.innerHTML = `
       <div class="cw-frame" style="--cw-accent:${accent}">
@@ -1205,7 +1215,7 @@ function renderMovieSuggestions() {
     card.dataset.idx = i;
     card.dataset.type = 'movie';
     const posterHtml = m.poster
-      ? `<img class="sm-poster" src="${m.poster}" alt="" onerror="handleImgError(this)" data-fallback="${m.emoji || '🎬'}" />`
+      ? `<img class="sm-poster" src="${m.poster}" alt="" loading="lazy" decoding="async" onerror="handleImgError(this)" data-fallback="${m.emoji || '🎬'}" />`
       : `<div class="sm-poster-fallback">${m.emoji || '🎬'}</div>`;
     card.innerHTML = `${posterHtml}<div class="sm-title">${m.name || m.title || ''}</div>`;
     card.addEventListener('click', () => openDetailModal('movie', m));
@@ -1229,7 +1239,7 @@ function renderLiveTVSuggestions() {
     card.dataset.idx = i;
     card.dataset.type = 'livetv';
     const logoHtml = ch.logo
-      ? `<img class="ch-logo" src="${ch.logo}" alt="" onerror="handleImgError(this)" data-fallback="${ch.emoji || '📺'}" />`
+      ? `<img class="ch-logo" src="${ch.logo}" alt="" loading="lazy" decoding="async" onerror="handleImgError(this)" data-fallback="${ch.emoji || '📺'}" />`
       : `<span class="ch-logo-fallback">${ch.emoji || '📺'}</span>`;
     card.innerHTML = `${logoHtml}<div class="ch-name">${ch.name || ''}</div>`;
     card.addEventListener('click', () => openDetailModal('livetv', ch));
@@ -1280,15 +1290,15 @@ function updateSuggFocus(zone) {
   if (zone === 'movies') {
     const cards = [...document.querySelectorAll('#suggestions-movies .sugg-movie-card')];
     cards.forEach((c, i) => c.classList.toggle('focused', i === state.suggMovieIdx));
-    cards[state.suggMovieIdx]?.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+    if (cards[state.suggMovieIdx]) cards[state.suggMovieIdx].scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
   } else if (zone === 'livetv') {
     const cards = [...document.querySelectorAll('#suggestions-livetv .sugg-ch-card')];
     cards.forEach((c, i) => c.classList.toggle('focused', i === state.suggLivetvIdx));
-    cards[state.suggLivetvIdx]?.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+    if (cards[state.suggLivetvIdx]) cards[state.suggLivetvIdx].scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
   } else if (zone === 'continue') {
     const cards = [...document.querySelectorAll('#suggestions-continue .sugg-continue-card')];
     cards.forEach((c, i) => c.classList.toggle('focused', i === state.suggContinueIdx));
-    cards[state.suggContinueIdx]?.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+    if (cards[state.suggContinueIdx]) cards[state.suggContinueIdx].scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
   }
 }
 
@@ -1373,7 +1383,7 @@ function openDetailModal(type, item) {
     playBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg> Ver ahora';
     // Live TV: logo centrado siempre (logos transparentes no sirven como hero a sangre)
     poster.innerHTML = item.logo
-      ? `<img src="${item.logo}" alt="" style="width:100%;height:100%;object-fit:contain;" onerror="this.parentElement.textContent='${item.emoji||'📺'}'">` 
+      ? `<img src="${item.logo}" alt="" loading="lazy" decoding="async" style="width:100%;height:100%;object-fit:contain;" onerror="this.parentElement.textContent='${item.emoji||'📺'}'">` 
       : (item.emoji || '📺');
   } else {
     badge.classList.add('hidden');
@@ -1390,7 +1400,7 @@ function openDetailModal(type, item) {
       poster.style.display = 'none';
     } else {
       poster.innerHTML = item.poster
-        ? `<img src="${item.poster}" alt="" style="width:100%;height:100%;object-fit:cover;" onerror="this.parentElement.textContent='${item.emoji||'🎬'}'">` 
+        ? `<img src="${item.poster}" alt="" loading="lazy" decoding="async" style="width:100%;height:100%;object-fit:cover;" onerror="this.parentElement.textContent='${item.emoji||'🎬'}'">` 
         : (item.emoji || '🎬');
     }
 
@@ -1596,6 +1606,19 @@ function handleModalKey(e) {
 const PLAYER_BTN_STYLE = 'background:rgba(255,255,255,0.12);border:none;color:#fff;' +
   'font-size:1.05rem;width:38px;height:38px;border-radius:50%;cursor:pointer;' +
   'display:flex;align-items:center;justify-content:center;transition:background 0.15s;flex-shrink:0;';
+
+// Botón de ajuste de imagen (zoom): con texto además del ícono, para que
+// sea obvio en qué modo está aunque no se conozca el ícono de memoria.
+const PLAYER_ZOOM_BTN_STYLE = 'background:rgba(255,255,255,0.12);border:none;color:#fff;' +
+  'font-size:0.8rem;font-weight:600;padding:0 14px;height:38px;border-radius:19px;cursor:pointer;' +
+  'display:flex;align-items:center;gap:6px;transition:background 0.15s;flex-shrink:0;white-space:nowrap;';
+
+// Modos de ajuste, en el orden en que el botón los cicla al hacer click.
+const PLAYER_ZOOM_MODES = [
+  { fit: 'contain', label: 'Ajustar'  }, // respeta proporción, puede dejar franjas negras
+  { fit: 'cover',   label: 'Rellenar' }, // llena la pantalla, recorta bordes si hace falta
+  { fit: 'fill',    label: 'Estirar'  }  // llena la pantalla, distorsiona si hace falta
+];
 
 function stopHLS() {
   if (state.hlsInstance) { state.hlsInstance.destroy(); state.hlsInstance = null; }
@@ -1822,6 +1845,7 @@ function playStream(url, title, onClose, isLive = false) {
           <button id="player-mute" style="${PLAYER_BTN_STYLE}">🔊</button>
           <input type="range" id="player-volume" min="0" max="1" value="1" step="0.05" style="width:70px;height:4px;cursor:pointer;accent-color:#3ecfcf;" />
           <div style="flex:1"></div>
+          <button id="player-zoom" style="${PLAYER_ZOOM_BTN_STYLE}">🔍 Ajustar</button>
           <button id="player-fullscreen" style="${PLAYER_BTN_STYLE}">⛶</button>
         </div>
       </div>
@@ -1830,7 +1854,7 @@ function playStream(url, title, onClose, isLive = false) {
         @keyframes player-spin { to { transform: rotate(360deg); } }
         #player-seek, #player-volume { -webkit-appearance:none; appearance:none; background:rgba(255,255,255,0.25); border-radius:2px; outline:none; }
         #player-seek::-webkit-slider-thumb, #player-volume::-webkit-slider-thumb { -webkit-appearance:none; width:13px; height:13px; border-radius:50%; background:#fff; cursor:pointer; margin-top:-4.5px; }
-        #player-back:hover, #player-playpause:hover, #player-mute:hover, #player-fullscreen:hover { background:rgba(255,255,255,0.22); }
+        #player-back:hover, #player-playpause:hover, #player-mute:hover, #player-fullscreen:hover, #player-zoom:hover { background:rgba(255,255,255,0.22); }
       </style>
     `;
     document.body.appendChild(overlay);
@@ -1842,6 +1866,7 @@ function playStream(url, title, onClose, isLive = false) {
     const seekSlider     = document.getElementById('player-seek');
     const seekRow        = document.getElementById('player-seek-row');
     const fsBtn          = document.getElementById('player-fullscreen');
+    const zoomBtn         = document.getElementById('player-zoom');
     const videoEl         = document.getElementById('hls-video');
 
     backBtn.onclick = closePlayer;
@@ -1922,6 +1947,22 @@ function playStream(url, title, onClose, isLive = false) {
       else enterPlayerFullscreen(overlay);
     };
 
+    // Ajuste de imagen (zoom): cicla Ajustar -> Rellenar -> Estirar -> Ajustar...
+    // El texto en el botón deja claro el modo activo (no solo el ícono).
+    let zoomIdx = 0;
+    function applyZoomMode() {
+      const mode = PLAYER_ZOOM_MODES[zoomIdx];
+      videoEl.style.objectFit = mode.fit;
+      zoomBtn.textContent = '🔍 ' + mode.label;
+    }
+    zoomBtn.onclick = () => {
+      zoomIdx = (zoomIdx + 1) % PLAYER_ZOOM_MODES.length;
+      applyZoomMode();
+    };
+    // Guardado en el overlay para poder resetear a "Ajustar" cada vez que
+    // se abre un video nuevo (ver más abajo, fuera de este bloque).
+    overlay._resetZoomMode = () => { zoomIdx = 0; applyZoomMode(); };
+
     // Auto-hide — solo reaccionar cuando el chrome está oculto para mostrar,
     // o cuando está visible para reiniciar el timer. Nunca en cada píxel.
     let hideTimer;
@@ -1978,6 +2019,7 @@ function playStream(url, title, onClose, isLive = false) {
   document.getElementById('player-playpause').textContent  = '⏸';
   document.getElementById('player-mute').textContent       = '🔊';
   document.getElementById('player-volume').value = 1;
+  if (overlay._resetZoomMode) overlay._resetZoomMode(); // vuelve a "Ajustar" en cada video nuevo
 
   const video   = document.getElementById('hls-video');
   const loading = document.getElementById('player-loading');
@@ -2024,7 +2066,17 @@ function playStream(url, title, onClose, isLive = false) {
   // red) o si se detecta audio sonando sin video (buen indicio de códec
   // incompatible), se escala automáticamente al siguiente nivel en vez de
   // dejar al usuario esperando indefinidamente.
-  const forceProxy = location.protocol === 'https:' && /^http:\/\//i.test(url);
+  // Excepción mdstrm (jul 2026): el CDN de mdstrm.com bloquea silenciosamente
+  // el tráfico desde IPs de datacenter (confirmado: el VPS -Oracle Cloud- no
+  // recibe ni siquiera un error, se cuelga; el navegador del usuario, con IP
+  // residencial, sí llega bien). Para estos dominios NO conviene forzar el
+  // proxy aunque sea http:// en página https:// -> se deja pasar directo
+  // (nivel 1), confiando en que el usuario habilitó "contenido inseguro"
+  // para este sitio en su navegador. Si no lo habilitó, el navegador lo
+  // bloqueará por su cuenta (mismo resultado que forzar proxy y que el
+  // proxy falle igual, pero sin gastar el VPS en el intento).
+  const isMdstrm = /(^|\.)mdstrm\.com$/i.test((() => { try { return new URL(url).hostname; } catch { return ''; } })());
+  const forceProxy = !isMdstrm && location.protocol === 'https:' && /^http:\/\//i.test(url);
   const proxiedM3U8   = `${API}/proxy-m3u8?url=${encodeURIComponent(url)}&token=${encodeURIComponent(getAuthTokenParam())}`;
   const transcodedUrl = `${API}/transcode?url=${encodeURIComponent(url)}&token=${encodeURIComponent(getAuthTokenParam())}`;
   let currentTier = forceProxy ? 2 : 1;
@@ -2267,6 +2319,7 @@ function openLiveTV() {
           padding:11px 18px;cursor:pointer;
           border-bottom:1px solid rgba(255,255,255,0.04);
           transition:0.15s;
+          content-visibility:auto;contain-intrinsic-size:340px 70px;
         ">
           <div style="
             width:44px;height:44px;border-radius:10px;
@@ -2274,7 +2327,7 @@ function openLiveTV() {
             display:flex;align-items:center;justify-content:center;
             font-size:1.4rem;flex-shrink:0;overflow:hidden;
           ">${ch.logo
-            ? `<img src="${ch.logo}" alt="" data-fallback="${ch.emoji || '📡'}" onerror="handleImgError(this)" style="width:100%;height:100%;object-fit:contain;background:#0a0a14;" />`
+            ? `<img src="${ch.logo}" alt="" loading="lazy" decoding="async" data-fallback="${ch.emoji || '📡'}" onerror="handleImgError(this)" style="width:100%;height:100%;object-fit:contain;background:#0a0a14;" />`
             : (ch.emoji || '📡')}</div>
           <div style="flex:1;min-width:0;">
             <div style="font-size:0.88rem;font-weight:600;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${ch.name}</div>
@@ -2426,9 +2479,25 @@ function openLiveTV() {
       // Ya está corregido en server.js. Mismo criterio que el reproductor
       // principal: forzar proxy si es http:// (mixed-content, bloqueo
       // seguro del navegador) y reintentar por proxy una vez si falla.
-      const forceProxy = location.protocol === 'https:' && /^http:\/\//i.test(url);
-      const proxiedM3U8 = `${API}/proxy-m3u8?url=${encodeURIComponent(url)}&token=${encodeURIComponent(getAuthTokenParam())}`;
+      // Excepción mdstrm (jul 2026): ver nota igual en playStream() -> el
+      // CDN de mdstrm bloquea IPs de datacenter del VPS, así que para estos
+      // dominios se deja pasar directo (nivel 1) en vez de forzar proxy.
+      const isMdstrm = /(^|\.)mdstrm\.com$/i.test((() => { try { return new URL(url).hostname; } catch { return ''; } })());
+      const forceProxy = !isMdstrm && location.protocol === 'https:' && /^http:\/\//i.test(url);
+      const proxiedM3U8   = `${API}/proxy-m3u8?url=${encodeURIComponent(url)}&token=${encodeURIComponent(getAuthTokenParam())}`;
+      const transcodedUrl = `${API}/transcode?url=${encodeURIComponent(url)}&token=${encodeURIComponent(getAuthTokenParam())}`;
       let usedProxyFallback = forceProxy;
+
+      // Nivel 3 (jul 2026): mismo criterio que playStream() -> si ya se
+      // intentó proxy y sigue fallando, es señal de códec incompatible
+      // (no de CORS/mixed-content), así que se re-encodea con /api/transcode
+      // y se reproduce como MP4 directo, sin HLS.js.
+      function loadPreviewTranscoded() {
+        if (previewHls) { previewHls.destroy(); previewHls = null; }
+        v.src = transcodedUrl;
+        v.onerror = failPreview;
+        attemptPlay();
+      }
 
       function loadPreviewHls(src) {
         if (typeof Hls !== 'undefined' && Hls.isSupported()) {
@@ -2444,7 +2513,8 @@ function openLiveTV() {
               loadPreviewHls(proxiedM3U8);
               return;
             }
-            failPreview();
+            hls.destroy();
+            loadPreviewTranscoded();
           });
           previewHls = hls;
         } else if (v.canPlayType('application/vnd.apple.mpegurl')) {
@@ -2476,7 +2546,7 @@ function openLiveTV() {
       if (nameEl) nameEl.textContent = ch ? (ch.name || '') : '';
       if (logoWrap) {
         logoWrap.innerHTML = !ch ? '' : (ch.logo
-          ? `<img src="${ch.logo}" alt="" data-fallback="${ch.emoji || '📡'}" onerror="handleImgError(this)" style="width:100%;height:100%;object-fit:contain;" />`
+          ? `<img src="${ch.logo}" alt="" loading="lazy" decoding="async" data-fallback="${ch.emoji || '📡'}" onerror="handleImgError(this)" style="width:100%;height:100%;object-fit:contain;" />`
           : `<span>${ch.emoji || '📡'}</span>`);
       }
       updatePreviewHint();
@@ -2536,12 +2606,12 @@ function openLiveTV() {
       // CH+ / CH- durante reproducción (canales: PageUp/PageDown o MediaTrackNext)
       if (key === 'ChannelUp' || key === 'PageUp') {
         const chans = getChanEls();
-        if (chans.length) { focusChan(tvChanIdx - 1); getChanEls()[tvChanIdx]?.click(); }
+        if (chans.length) { focusChan(tvChanIdx - 1); var _ce1 = getChanEls()[tvChanIdx]; if (_ce1) _ce1.click(); }
         return true;
       }
       if (key === 'ChannelDown' || key === 'PageDown') {
         const chans = getChanEls();
-        if (chans.length) { focusChan(tvChanIdx + 1); getChanEls()[tvChanIdx]?.click(); }
+        if (chans.length) { focusChan(tvChanIdx + 1); var _ce2 = getChanEls()[tvChanIdx]; if (_ce2) _ce2.click(); }
         return true;
       }
 
@@ -2550,7 +2620,8 @@ function openLiveTV() {
         if (tvPane === 'back') {
           back.click();
         } else if (tvPane === 'cats') {
-          getCatEls()[tvCatIdx]?.click();
+          var _cate = getCatEls()[tvCatIdx];
+          if (_cate) _cate.click();
           tvChanIdx = 0;
           focusChan(0);
         } else if (previewPlaying) {
@@ -2616,13 +2687,14 @@ function openMovies() {
           <div class="movie-card" data-index="${i}" data-url="${m.url}" data-name="${m.name}" style="
             background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);
             border-radius:12px;overflow:hidden;cursor:pointer;transition:0.2s;
+            content-visibility:auto;contain-intrinsic-size:160px 170px;
           ">
             <div style="
               height:100px;background:rgba(255,255,255,0.05);
               display:flex;align-items:center;justify-content:center;font-size:2.5rem;
               overflow:hidden;
             ">${m.poster
-              ? `<img src="${m.poster}" alt="" data-fallback="${m.emoji || '🎬'}" onerror="handleImgError(this)" style="width:100%;height:100%;object-fit:cover;" />`
+              ? `<img src="${m.poster}" alt="" loading="lazy" decoding="async" data-fallback="${m.emoji || '🎬'}" onerror="handleImgError(this)" style="width:100%;height:100%;object-fit:cover;" />`
               : (m.emoji || '🎬')}</div>
             <div style="padding:10px 12px;">
               <div style="font-size:0.82rem;font-weight:600;color:var(--text-primary);margin-bottom:3px;
@@ -2668,7 +2740,7 @@ function openMovies() {
       if (!cards.length) return;
       if (key === 'Enter') {
         playSnd('enter');
-        if (atBack) back.click(); else cards[_movIdx]?.click();
+        if (atBack) back.click(); else { var _c1 = cards[_movIdx]; if (_c1) _c1.click(); }
         return true;
       }
       if (!['ArrowRight','ArrowLeft','ArrowDown','ArrowUp'].includes(key)) return false;
@@ -2755,7 +2827,7 @@ function renderMoviesNetflix(body, back, movies) {
             ${newItemsRow.map(({ m, i }) => `
               <div class="nf-card" tabindex="-1" data-index="${i}">
                 ${m.poster
-                  ? `<img class="nf-card-poster" src="${m.poster}" alt="" data-fallback="${m.emoji || '🎬'}" onerror="handleImgError(this)" />`
+                  ? `<img class="nf-card-poster" src="${m.poster}" alt="" loading="lazy" decoding="async" data-fallback="${m.emoji || '🎬'}" onerror="handleImgError(this)" />`
                   : `<div class="nf-card-fallback">${m.emoji || '🎬'}</div>`}
                 <div class="nf-card-title">${m.name || m.title || ''}</div>
               </div>
@@ -2784,7 +2856,7 @@ function renderMoviesNetflix(body, back, movies) {
             ${items.map(({ m, i }) => `
               <div class="nf-card" tabindex="-1" data-index="${i}">
                 ${m.poster
-                  ? `<img class="nf-card-poster" src="${m.poster}" alt="" data-fallback="${m.emoji || '🎬'}" onerror="handleImgError(this)" />`
+                  ? `<img class="nf-card-poster" src="${m.poster}" alt="" loading="lazy" decoding="async" data-fallback="${m.emoji || '🎬'}" onerror="handleImgError(this)" />`
                   : `<div class="nf-card-fallback">${m.emoji || '🎬'}</div>`}
                 <div class="nf-card-title">${m.name || m.title || ''}</div>
               </div>
@@ -2812,7 +2884,7 @@ function renderMoviesNetflix(body, back, movies) {
               const pct = p.duration > 0 ? Math.min(100, Math.round((p.position / p.duration) * 100)) : 0;
               const accent = CW_ACCENTS[idx % CW_ACCENTS.length];
               const frameHtml = m.poster
-                ? `<img src="${m.poster}" alt="" data-fallback="${m.emoji || '🎬'}" onerror="handleImgError(this)" />`
+                ? `<img src="${m.poster}" alt="" loading="lazy" decoding="async" data-fallback="${m.emoji || '🎬'}" onerror="handleImgError(this)" />`
                 : `<div class="cw-frame-fallback">${m.emoji || '🎬'}</div>`;
               return `
                 <div class="nf-card cw-card" tabindex="-1" data-index="${i}">
@@ -2886,7 +2958,7 @@ function renderMoviesNetflix(body, back, movies) {
   state.appNavHandler = (key) => {
     if (key === 'Enter') {
       playSnd('enter');
-      if (atBack) back.click(); else cardsOf(_row)[_col]?.click();
+      if (atBack) back.click(); else { var _c2 = cardsOf(_row)[_col]; if (_c2) _c2.click(); }
       return true;
     }
     if (!['ArrowRight','ArrowLeft','ArrowDown','ArrowUp'].includes(key)) return false;
@@ -2926,13 +2998,14 @@ function openNewMoviesView(items) {
         <div class="movie-card" data-index="${i}" style="
           background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);
           border-radius:12px;overflow:hidden;cursor:pointer;transition:0.2s;
+          content-visibility:auto;contain-intrinsic-size:160px 170px;
         ">
           <div style="
             height:100px;background:rgba(255,255,255,0.05);
             display:flex;align-items:center;justify-content:center;font-size:2.5rem;
             overflow:hidden;
           ">${m.poster
-            ? `<img src="${m.poster}" alt="" data-fallback="${m.emoji || '🎬'}" onerror="handleImgError(this)" style="width:100%;height:100%;object-fit:cover;" />`
+            ? `<img src="${m.poster}" alt="" loading="lazy" decoding="async" data-fallback="${m.emoji || '🎬'}" onerror="handleImgError(this)" style="width:100%;height:100%;object-fit:cover;" />`
             : (m.emoji || '🎬')}</div>
           <div style="padding:10px 12px;">
             <div style="font-size:0.82rem;font-weight:600;color:var(--text-primary);margin-bottom:3px;
@@ -2974,7 +3047,7 @@ function openNewMoviesView(items) {
     if (!cards.length) return;
     if (key === 'Enter') {
       playSnd('enter');
-      if (atBackNew) back.click(); else cards[_newIdx]?.click();
+      if (atBackNew) back.click(); else { var _c3 = cards[_newIdx]; if (_c3) _c3.click(); }
       return true;
     }
     if (!['ArrowRight','ArrowLeft','ArrowDown','ArrowUp'].includes(key)) return false;
@@ -3079,8 +3152,8 @@ function openRadio() {
       if (key === 'Enter') {
         playSnd('enter');
         if (radioZone === 'back') back.click();
-        else if (radioZone === 'controls') getControlEls()[radioCtrlIdx]?.click();
-        else getStationEls()[radioStatIdx]?.click();
+        else if (radioZone === 'controls') { var _ce3 = getControlEls()[radioCtrlIdx]; if (_ce3) _ce3.click(); }
+        else { var _se1 = getStationEls()[radioStatIdx]; if (_se1) _se1.click(); }
         return true;
       }
       if (!['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(key)) return false;

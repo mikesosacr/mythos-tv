@@ -1,0 +1,8 @@
+[{
+      "relation": ["delegate_permission/common.handle_all_urls"],
+      "target": {
+        "namespace": "android_app",
+        "package_name": "org.duckdns.mythostv.twa",
+        "sha256_cert_fingerprints": ["23:D3:19:03:C8:4D:5F:AB:5F:47:C7:63:BE:25:EE:31:91:E8:75:89:CC:A0:70:FE:BC:06:F3:78:D1:C6:F9:59"]
+      }
+    }]

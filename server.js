@@ -131,6 +131,22 @@ function clearAttempts(key) {
 // ── Middleware ───────────────────────────────────────────────────
 app.set('trust proxy', true); // Nginx hace de proxy — sin esto, la IP real del
                                 // cliente se pierde (todos aparecerían como localhost).
+
+// Compresión gzip — reduce ~70-85% el tamaño de /api/config y demás respuestas JSON.
+// Se excluyen las rutas de streaming/proxy: el video ya viene comprimido (h264/aac),
+// intentar re-comprimirlo solo gastaría CPU del VPS sin ahorrar nada de tamaño real.
+const compression = require('compression');
+app.use(compression({
+  filter: (req, res) => {
+    if (req.path.startsWith('/api/proxy-stream') ||
+        req.path.startsWith('/api/proxy-m3u8')  ||
+        req.path.startsWith('/api/transcode')) {
+      return false;
+    }
+    return compression.filter(req, res);
+  },
+}));
+
 app.use(express.json({ limit: '10mb' }));
 
 // CORS — allow same origin and local network
@@ -150,6 +166,18 @@ app.get('/api/config', (req, res) => {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
   res.setHeader('Pragma', 'no-cache');
   res.json(loadConfig());
+});
+
+// PROTECTED: versión liviana de /api/config, solo para el polling de tema
+// (startThemePolling() en app.js, cada 4s). Con catálogos grandes, pedir
+// /api/config completo solo para leer el tema es un desperdicio de ancho
+// de banda/CPU que crece con el catálogo — este endpoint devuelve unos
+// pocos bytes sin importar cuántas películas/canales haya.
+app.get('/api/theme', (req, res) => {
+  if (!checkAnyAuth(req)) return res.status(403).json({ error: 'No autorizado' });
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.json({ theme: loadConfig().theme || 'default' });
 });
 
 // ── PUBLIC: Admin login ──────────────────────────────────────────

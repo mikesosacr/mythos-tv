@@ -304,7 +304,10 @@
             <span>Emoji</span><span class="sort-th" onclick="sortList('livetv','name')">Nombre<i class="sort-arrow" id="sort-arrow-livetv-name"></i></span><span class="sort-th" onclick="sortList('livetv','cat')">Categoría<i class="sort-arrow" id="sort-arrow-livetv-cat"></i></span><span class="sort-th" onclick="sortList('livetv','url')">URL Stream<i class="sort-arrow" id="sort-arrow-livetv-url"></i></span><span>URL Logo</span><span></span>
           </div>
           <div class="item-list" id="livetv-list"></div>
-          <button class="btn btn-secondary btn-sm" onclick="addRow('livetv')" style="margin-top:4px;">➕ Agregar canal</button>
+          <div style="display:flex;gap:8px;margin-top:4px;">
+            <button class="btn btn-secondary btn-sm" onclick="addRow('livetv')">➕ Agregar canal</button>
+            <button class="btn btn-primary btn-sm" onclick="saveAll('livetv')">💾 Guardar</button>
+          </div>
         </div>
       </section>
 

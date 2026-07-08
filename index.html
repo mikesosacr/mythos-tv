@@ -27,6 +27,34 @@
 </head>
 <body>
   <script>
+    // Overlay de errores visible en pantalla — ayuda a diagnosticar en TV boxes
+    // sin necesidad de ADB/consola remota. Escrito en ES5 puro a propósito,
+    // para que funcione incluso si el resto del JS falla por incompatibilidad.
+    (function () {
+      function showFatalError(msg, source, lineno) {
+        try {
+          var existing = document.getElementById('mythos-fatal-error');
+          if (existing) return; // ya se mostró uno, no duplicar
+          var box = document.createElement('div');
+          box.id = 'mythos-fatal-error';
+          box.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;' +
+            'background:#1a0000;color:#ffdddd;z-index:999999;' +
+            'font-family:monospace;font-size:16px;padding:24px;overflow:auto;' +
+            'white-space:pre-wrap;';
+          var text = 'MythOS TV — Error al cargar la app\n\n' +
+            'Mensaje: ' + msg + '\n' +
+            'Archivo: ' + (source || 'desconocido') + '\n' +
+            'Línea: ' + (lineno || 'desconocida') + '\n\n' +
+            'Sacá una foto de esta pantalla y compartila para soporte.';
+          box.textContent = text;
+          document.body.appendChild(box);
+        } catch (e) { /* si esto falla, no hay nada más que hacer */ }
+      }
+      window.addEventListener('error', function (ev) {
+        showFatalError(ev.message, ev.filename, ev.lineno);
+      });
+    })();
+
     // Aplica el tema guardado ANTES de pintar nada — evita el destello
     // del tema clásico mientras se espera la respuesta de /api/config
     // (ver applyTheme() en app.js, que mantiene este valor actualizado).
