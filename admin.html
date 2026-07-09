@@ -265,6 +265,7 @@
               <select id="sys-theme">
                 <option value="default">Clásico (grid actual)</option>
                 <option value="netflix">Netflix (filas horizontales)</option>
+                <option value="whale">Whale (riel lateral)</option>
               </select>
               <div style="font-size:0.72rem;color:var(--muted);margin-top:4px;">El cambio se aplica al instante en todas las TVs conectadas, sin recargar.</div>
             </div>
@@ -572,7 +573,7 @@
 'use strict';
 
 const API = '/api';
-let TOKEN = sessionStorage.getItem('mytv-token') || '';
+let TOKEN = localStorage.getItem('mytv-token') || '';
 let CFG   = null; // live copy of server config
 
 /* ══════════════════════════════════════════
@@ -589,7 +590,7 @@ async function doLogin() {
     const data = await res.json();
     if (data.ok) {
       TOKEN = data.token;
-      sessionStorage.setItem('mytv-token', TOKEN);
+      localStorage.setItem('mytv-token', TOKEN);
       document.getElementById('login-screen').style.display = 'none';
       document.getElementById('main-screen').style.display  = 'flex';
       document.getElementById('topbar-user').textContent    = `👤 ${user}`;
@@ -610,7 +611,7 @@ document.addEventListener('keydown', e => {
 });
 
 function doLogout() {
-  TOKEN = ''; sessionStorage.removeItem('mytv-token');
+  TOKEN = ''; localStorage.removeItem('mytv-token');
   CFG   = null;
   document.getElementById('login-screen').style.display = 'flex';
   document.getElementById('main-screen').style.display  = 'none';
@@ -630,7 +631,7 @@ function doLogout() {
       return;
     } catch {}
   }
-  TOKEN = ''; sessionStorage.removeItem('mytv-token');
+  TOKEN = ''; localStorage.removeItem('mytv-token');
   document.getElementById('login-screen').style.display = 'flex';
   document.getElementById('main-screen').style.display  = 'none';
 })();
@@ -1476,7 +1477,7 @@ async function changePassword() {
     const data = await r.json();
     if (data.ok) {
       TOKEN = data.token;
-      sessionStorage.setItem('mytv-token', TOKEN);
+      localStorage.setItem('mytv-token', TOKEN);
       res.className = 'import-result show ok';
       res.textContent = '✅ Credenciales actualizadas — usa las nuevas la próxima vez';
     } else {

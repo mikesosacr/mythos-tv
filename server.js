@@ -729,6 +729,30 @@ app.post('/api/progress', (req, res) => {
   res.json({ ok: true });
 });
 
+// PUBLIC: quitar una película de "Continuar viendo" a pedido del
+// usuario (botón "Quitar" en el Home / modal de detalle). Distinto del
+// flag "finished" de arriba: acá el usuario decide que no quiere
+// retomarla, no que la terminó de ver — simplemente se borra su
+// progreso guardado y desaparece de la fila.
+app.delete('/api/progress/:username', (req, res) => {
+  const username  = String(req.params.username || '').toLowerCase();
+  const movieName = String((req.body && req.body.movieName) || req.query.movieName || '');
+  if (!username || !movieName) return res.status(400).json({ error: 'Usuario y película requeridos' });
+
+  const isAdmin  = checkAuth(req);
+  const userAuth = checkUserAuth(req);
+  if (!isAdmin && (!userAuth || userAuth.username !== username)) {
+    return res.status(403).json({ error: 'No autorizado' });
+  }
+
+  const all = loadProgress();
+  if (all[username] && all[username][movieName]) {
+    delete all[username][movieName];
+    saveProgress(all);
+  }
+  res.json({ ok: true });
+});
+
 // PUBLIC: registro de nuevo usuario (queda pendiente)
 app.post('/api/users/register', (req, res) => {
   const { username, pin, emoji, displayName } = req.body;

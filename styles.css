@@ -1780,6 +1780,7 @@ body.theme-netflix .nf-topnav { display: flex; }
 .nf-topnav-dropdown-item:hover,
 .nf-topnav-dropdown-item.focused { background: var(--bg-glass-hover); }
 .nf-topnav-dropdown-item .tn-icon { width: 18px; text-align: center; flex-shrink: 0; }
+.nf-topnav-item .tn-icon { margin-right: 6px; }
 
 /* ══════════════════════════════════════════════════════════════
    HOME — TEMA NETFLIX (banner destacado + filas)
@@ -2164,6 +2165,40 @@ body.theme-netflix .home-default-view { display: none; }
   opacity: 1;
   transform: translate(-50%, -50%) scale(1);
 }
+.cw-remove-btn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0,0,0,0.55);
+  color: #fff;
+  font-size: 0.72rem;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  z-index: 2;
+  transition: opacity 0.15s ease, background 0.15s ease;
+}
+.cw-card:hover .cw-remove-btn,
+.cw-card.focused .cw-remove-btn {
+  opacity: 1;
+}
+.cw-remove-btn:hover,
+.cw-remove-btn:focus {
+  background: rgba(220,60,60,0.9);
+}
+/* Sin hover real (touch / control remoto sin puntero) — siempre
+   visible aunque tenue, para que se pueda tocar sin pasar antes por
+   un estado de hover que ese dispositivo nunca dispara. */
+@media (hover: none) {
+  .cw-remove-btn { opacity: 0.85; }
+}
 .cw-title {
   position: absolute;
   left: 10px;
@@ -2324,3 +2359,272 @@ body.theme-netflix .home-default-view { display: none; }
 }
 .theme-netflix .detail-btn-restart:hover,
 .theme-netflix .detail-btn-restart:focus { color: #fff; }
+
+/* ═══════════════════════════════════════════════════════════════
+   TEMA WHALE — riel lateral + reskin de Home (jul 2026)
+   Reutiliza el DOM y la navegación por control remoto del tema
+   Netflix (mismo .topbar / #nf-topnav / #home-netflix-view, ver
+   applyTheme() en app.js: 'whale' agrega la clase 'theme-netflix'
+   además de 'theme-whale'). Acá solo se reposiciona visualmente
+   ese mismo contenido a un riel vertical y se retoca color/forma
+   del contenido de Home. Alcance v1: solo Home — el resto de
+   pantallas (Configuración, Películas, Live TV, Radio) se ven
+   igual que en el tema Netflix clásico por ahora.
+   ═══════════════════════════════════════════════════════════════ */
+
+/* -- Riel: el .topbar existente pasa de barra horizontal arriba a
+   columna fija a la izquierda. Es chrome global (igual que el
+   nf-topnav hoy ya es persistente entre Inicio/Películas/Live TV/
+   Radio), así que queda visible en todas las pantallas aunque el
+   reskin de contenido sea solo Home. */
+body.theme-whale .topbar {
+  position: fixed;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  z-index: 30;
+  width: 84px;
+  height: 100vh;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 28px 0 24px;
+  padding-left: env(safe-area-inset-left, 0px);
+  /* Riel flotante: sin panel sólido ni borde — los íconos flotan
+     directo sobre el fondo de la app, igual que en la referencia. */
+  background: transparent;
+  background-image: none;
+  border-right: none;
+  gap: 28px;
+}
+body.theme-whale .topbar-left { order: 0; margin-bottom: 8px; }
+body.theme-whale .topbar-brand {
+  font-size: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255,255,255,0.08);
+}
+body.theme-whale .topbar-brand::before {
+  content: '';
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.55);
+}
+body.theme-whale .topbar-os { display: none; }
+
+/* -- Nav vertical: mismo #nf-topnav de siempre, solo apilado y sin
+   fondo propio (los íconos flotan, solo el ítem activo/foco tiene
+   una píldora clara detrás, igual que en la referencia). Se le
+   agrega ícono (ver renderNfTopnav() / makeAppBtn() en app.js, que
+   agrega <span class="tn-icon"> también en los botones primarios,
+   no solo en el desplegable "Más") y se oculta el texto para que
+   quede compacto en el ancho del riel. */
+body.theme-whale .nf-topnav {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-left: 0;
+  gap: 26px;
+  order: 1;
+}
+body.theme-whale .nf-topnav-item {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0; /* oculta el label de texto, el ícono queda visible */
+  color: rgba(255,255,255,0.55);
+  background: transparent;
+}
+body.theme-whale .nf-topnav-item .tn-icon {
+  font-size: 1.25rem;
+  margin: 0;
+}
+body.theme-whale .nf-topnav-item.active,
+body.theme-whale .nf-topnav-item.focused {
+  background: rgba(255,255,255,0.95);
+  color: #12121a;
+}
+body.theme-whale .nf-topnav-item.active::after { display: none; }
+body.theme-whale .nf-topnav-more { display: flex; justify-content: center; }
+/* El desplegable "Más" se abre hacia la derecha del riel en vez de hacia abajo */
+body.theme-whale .nf-topnav-dropdown {
+  left: 100%;
+  top: 0;
+  margin-left: 8px;
+}
+
+/* -- Utilidades (wifi / cerrar sesión) al fondo del riel, mismo
+   estilo flotante sin fondo que el resto del riel. */
+body.theme-whale .topbar-right {
+  order: 2;
+  flex-direction: column;
+  margin-left: 0;
+  margin-top: auto;
+  gap: 22px;
+}
+body.theme-whale .topbar-date,
+body.theme-whale .topbar-time { display: none; }
+body.theme-whale .topbar-icons { flex-direction: column; gap: 22px; }
+body.theme-whale .topbar-icons .topbar-icon {
+  color: rgba(255,255,255,0.5);
+  background: transparent;
+}
+/* -- El badge ADMIN (inyectado por JS con estilos inline en
+   renderAdminBadge()) queda enorme y con texto visible si no se
+   achica acá — en el riel angosto solo debe verse como un puntito
+   de acento, no como una píldora con texto. */
+#admin-topbar-badge {
+  font-size: 0 !important;
+  width: 10px;
+  height: 10px;
+  padding: 0 !important;
+  border-radius: 50%;
+  margin: 0 !important;
+}
+/* -- El dropdown "Más" nunca debe poder salirse de la pantalla por
+   abajo, sin importar en qué ítem del riel esté anclado. */
+body.theme-whale .nf-topnav-dropdown {
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+}
+/* -- El botón que abre "Más" ahora usa el ícono de engrane (tn-icon);
+   la flechita "▾" ya no hace falta en el riel angosto. */
+body.theme-whale .nf-topnav-more-btn .nf-topnav-caret { display: none; }
+
+/* -- Empuja el contenido a la derecha del riel. El .topbar ya no
+   ocupa espacio en el flujo (position:fixed), así que el hueco lo
+   da .viewport con margin-left. */
+body.theme-whale .viewport { margin-left: 74px; }
+body.theme-whale #screen-home { padding-top: 4px; }
+
+/* -- Reskin del contenido de Home: acento rosa/magenta en vez del
+   morado/teal del tema Netflix clásico, tarjetas con más redondeo. */
+body.theme-whale .nf-card { border-radius: 10px; }
+body.theme-whale .nf-card.focused,
+body.theme-whale .nf-card:hover { border-color: #d4537e; }
+body.theme-whale .nf-card-progress-fill { background: #d4537e; }
+body.theme-whale .cw-frame { border-radius: 10px; }
+body.theme-whale .cw-progress-fill { background: #d4537e; }
+body.theme-whale .home-hero-btn-play { background: #d4537e; color: #fff; }
+body.theme-whale .home-hero-btn:hover,
+body.theme-whale .home-hero-btn.focused { box-shadow: 0 0 0 2px #d4537e; }
+body.theme-whale .home-hero-banner { border-radius: 14px; }
+
+/* -- Hero (v2, jul 2026): la referencia real de Whale OS usa un
+   banner grande de 1 sola película/serie, no una fila de categorías
+   — se restylea el hero clásico en vez de reemplazarlo. Más alto,
+   degradado desde la izquierda (no desde abajo) para que el título
+   quede legible sobre fondo oscuro con la imagen a la derecha, título
+   más grande, y el botón Reproducir como círculo grande (sin texto,
+   font-size:0 colapsa el nodo de texto sin tocar el <svg>). */
+body.theme-whale .home-hero-banner {
+  height: clamp(360px, 62vh, 620px);
+}
+body.theme-whale .home-hero-scrim {
+  background: linear-gradient(90deg, rgba(10,10,16,0.95) 0%, rgba(10,10,16,0.6) 40%, rgba(10,10,16,0) 68%);
+}
+body.theme-whale .home-hero-info {
+  bottom: auto;
+  top: 12%;
+  right: auto;
+  max-width: 50%;
+}
+body.theme-whale .home-hero-title {
+  font-size: clamp(2.1rem, 5vw, 3.4rem);
+  max-width: 100%;
+}
+body.theme-whale .home-hero-btn-play {
+  width: 62px;
+  height: 62px;
+  border-radius: 50%;
+  padding: 0;
+  font-size: 0;
+}
+body.theme-whale .home-hero-btn-play svg { width: 22px; height: 22px; }
+body.theme-whale .home-hero-btn-info {
+  background: rgba(255,255,255,0.12);
+}
+
+/* -- Tarjetas de contenido (Nuevo/Películas/Live TV/Radio): horizontales
+   en vez de póster vertical, igual que "Your Top Choices" en la
+   referencia. El título deja de ocupar una franja fija abajo (no se
+   ve texto permanente bajo las miniaturas en la referencia) y pasa a
+   ser un overlay que solo aparece en foco/hover, para no perder la
+   identificación con el control remoto. */
+body.theme-whale .nf-card { width: 176px; }
+body.theme-whale .nf-card-poster,
+body.theme-whale .nf-card-fallback { height: 108px; }
+body.theme-whale .nf-card-title {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(to top, rgba(0,0,0,0.85), transparent);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  pointer-events: none;
+}
+body.theme-whale .nf-card:hover .nf-card-title,
+body.theme-whale .nf-card.focused .nf-card-title {
+  opacity: 1;
+}
+
+/* -- Dock de apps en Home (ver homeWhaleDockRowHtml() en app.js).
+   Reusa .app-tile del launcher clásico, solo compacta el tamaño para
+   que quede como fila de íconos redondeados sin texto, igual que el
+   dock de apps de la referencia. Se le agrega una "repisa" flotante
+   detrás (panel redondeado semitransparente) igual que en la
+   referencia, en vez de flotar directo sobre el fondo de la app. */
+/* Fila "Tus apps": centrada y sin título, igual que el dock de la
+   referencia real de Whale OS (no lleva encabezado de texto arriba). */
+body.theme-whale .home-netflix-view .nf-row:last-child .nf-row-title { display: none; }
+body.theme-whale .home-netflix-view .nf-row:last-child .nf-row-track {
+  justify-content: center;
+}
+body.theme-whale .home-netflix-view .nf-row-track { gap: 16px; }
+body.theme-whale .home-netflix-view .nf-row-track .app-tile {
+  width: 64px;
+  height: 64px;
+  border-radius: 16px;
+  gap: 0;
+  /* Sin borde/cristal: en la referencia de Whale OS el ícono de la app
+     (ya viene con su propio fondo blanco/de color en el logo) se ve
+     "pelado", sin marco extra alrededor. */
+  border: none;
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+body.theme-whale .home-netflix-view .nf-row-track .app-tile .tile-bg { display: none; }
+body.theme-whale .home-netflix-view .nf-row-track .app-tile .tile-label { display: none; }
+body.theme-whale .home-netflix-view .nf-row-track .app-tile .tile-icon {
+  width: 100%;
+  height: 100%;
+  border-radius: 16px;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.35);
+}
+body.theme-whale .home-netflix-view .nf-row-track .app-tile:hover,
+body.theme-whale .home-netflix-view .nf-row-track .app-tile.focused {
+  transform: scale(1.15) translateY(-6px);
+  border-color: transparent;
+  background: transparent;
+  box-shadow: 0 10px 26px rgba(0,0,0,0.5);
+  z-index: 5;
+}
+body.theme-whale .home-netflix-view .nf-row:last-child .nf-row-track-wrap {
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 auto;
+  background: rgba(255,255,255,0.06);
+  border-radius: 24px;
+  padding: 10px 16px;
+}

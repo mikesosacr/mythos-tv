@@ -123,6 +123,49 @@ function saveProgressToServer(movieName, url, position, duration) {
   }).catch(() => {});
 }
 
+// Quitar una película de "Continuar viendo" a pedido del usuario
+// (no la marca como vista, solo borra el progreso guardado). Actualiza
+// state.progress local al toque (para que la fila/UI reaccione ya
+// mismo) y avisa al servidor en paralelo.
+function removeProgressFromServer(movieName) {
+  const username = getUsername();
+  if (!username || !movieName) return;
+  state.progress = (state.progress || []).filter(p => p.movieName !== movieName);
+  fetch(`${API}/progress/${encodeURIComponent(username)}`, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+    body: JSON.stringify({ movieName }),
+  }).catch(() => {});
+}
+
+// Mismo umbral que usa server.js para marcar una película como
+// "vista" y sacarla de Continuar viendo (ver WATCHED_THRESHOLD ahí).
+// Se duplica acá porque el front necesita poder decidir esto al
+// instante, sin esperar la respuesta del servidor.
+const PROGRESS_WATCHED_THRESHOLD = 0.90;
+
+// Actualiza state.progress EN EL MOMENTO (sin esperar red) para que
+// "Continuar viendo" refleje el avance apenas se cierra el reproductor,
+// en vez de quedar desactualizado hasta el próximo refresh de página.
+// saveProgressToServer() ya manda esto al backend por su cuenta — esta
+// función solo mantiene sincronizado el estado local con lo que el
+// backend va a terminar guardando.
+function upsertLocalProgress(movieName, url, position, duration) {
+  if (!movieName) return;
+  const dur   = Number(duration) || 0;
+  const pos   = Number(position) || 0;
+  const ratio = dur > 0 ? pos / dur : 0;
+
+  state.progress = (state.progress || []).filter(p => p.movieName !== movieName);
+
+  // >=90% visto: el backend la marca "finished" y deja de devolverla
+  // en /api/progress — acá, en vez de agregarla, directamente no se
+  // vuelve a meter en la lista local (mismo resultado, sin red).
+  if (ratio < PROGRESS_WATCHED_THRESHOLD) {
+    state.progress.unshift({ movieName, url: url || '', position: pos, duration: dur, timestamp: Date.now(), finished: false });
+  }
+}
+
 function getMovieProgress(movieName) {
   if (!movieName || !state.progress) return null;
   return state.progress.find(p => p.movieName === movieName) || null;
@@ -183,10 +226,20 @@ function applyConfig(cfg) {
    el resto (YouTube, Plex, Configuración, Panel Admin, etc.) va
    agrupado en el desplegable "Más".
    ══════════════════════════════════════════════════════════════ */
+// Ítems de "sistema" (no son apps de streaming): Configuración y Panel
+// Admin. En el tema Whale estos dos son los ÚNICOS que van en el
+// desplegable "Más" del riel — el resto de las apps (YouTube, Plex,
+// Whale TV+, etc.) ya viven abajo en la fila "Tus apps" del Home, así
+// que mostrarlas también acá las duplicaba (Mike, jul 2026).
+function isSystemNavApp(a) {
+  return a.id === 'settings' || a.id === 'adminpanel';
+}
+
 function renderNfTopnav() {
   const nav = document.getElementById('nf-topnav');
   if (!nav) return;
   const apps = state.apps || [];
+  const isWhale = document.body.classList.contains('theme-whale');
   const isLiveTv = (a) => a.screen === 'livetv' || a.screen === 'iptv';
   const primary = [
     apps.find(a => a.screen === 'movies'),
@@ -194,6 +247,10 @@ function renderNfTopnav() {
     apps.find(a => a.screen === 'radio'),
   ].filter(Boolean);
   const rest = apps.filter(a => !primary.includes(a));
+  // En Whale, el desplegable "Más" solo muestra Configuración/Panel Admin;
+  // en el resto de los temas se mantiene el comportamiento de siempre
+  // (todo lo que no es primary va al desplegable).
+  const dropdownApps = isWhale ? rest.filter(isSystemNavApp) : rest;
 
   nav.innerHTML = '';
 
@@ -201,34 +258,39 @@ function renderNfTopnav() {
   homeBtn.type = 'button';
   homeBtn.className = 'nf-topnav-item';
   homeBtn.dataset.nfNav = 'home';
-  homeBtn.textContent = 'Inicio';
+  homeBtn.innerHTML = '<span class="tn-icon">🏠</span>Inicio';
   nav.appendChild(homeBtn);
 
   // Cada botón guarda la app en una propiedad del propio elemento
   // (btn._nfApp), no un índice de array — así el clic siempre abre
   // exactamente la app que se ve en el botón, sin depender de que
   // state.apps mantenga el mismo orden entre el render y el clic.
+  // El ícono (tn-icon) se agrega siempre, no solo en el desplegable
+  // "Más" — lo usa el riel vertical del tema Whale (ver styles.css)
+  // para mostrar solo el ícono en los 74px de ancho del riel; en el
+  // menú horizontal clásico simplemente se ve como un ícono chico
+  // antes del texto, sin romper nada de lo que ya había.
   function makeAppBtn(a, isDropdown) {
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = isDropdown ? 'nf-topnav-dropdown-item' : 'nf-topnav-item';
     btn.dataset.nfApp = '1';
     btn._nfApp = a;
+    const icon = document.createElement('span');
+    icon.className = 'tn-icon';
+    icon.textContent = a.emoji || '🚀';
+    btn.appendChild(icon);
     if (isDropdown) {
-      const icon = document.createElement('span');
-      icon.className = 'tn-icon';
-      icon.textContent = a.emoji || '🚀';
-      btn.appendChild(icon);
       btn.appendChild(document.createTextNode(a.label));
     } else {
-      btn.textContent = a.label;
+      btn.appendChild(document.createTextNode(a.label));
     }
     return btn;
   }
 
   primary.forEach(a => nav.appendChild(makeAppBtn(a, false)));
 
-  if (rest.length) {
+  if (dropdownApps.length) {
     const moreWrap = document.createElement('div');
     moreWrap.className = 'nf-topnav-more';
     moreWrap.id = 'nf-topnav-more';
@@ -236,12 +298,15 @@ function renderNfTopnav() {
     moreBtn.type = 'button';
     moreBtn.className = 'nf-topnav-item nf-topnav-more-btn';
     moreBtn.id = 'nf-topnav-more-btn';
-    moreBtn.innerHTML = 'Más <span class="nf-topnav-caret">▾</span>';
+    // Ícono de engrane real (mismo tn-icon que usan home/movies/tv/radio)
+    // en vez de la flechita "▾" chiquita — en el riel de Whale (ícono
+    // solo, texto oculto) antes quedaba como un puntito casi invisible.
+    moreBtn.innerHTML = '<span class="tn-icon">⚙️</span>Más <span class="nf-topnav-caret">▾</span>';
     moreWrap.appendChild(moreBtn);
     const dropdown = document.createElement('div');
     dropdown.className = 'nf-topnav-dropdown';
     dropdown.id = 'nf-topnav-dropdown';
-    rest.forEach(a => dropdown.appendChild(makeAppBtn(a, true)));
+    dropdownApps.forEach(a => dropdown.appendChild(makeAppBtn(a, true)));
     moreWrap.appendChild(dropdown);
     nav.appendChild(moreWrap);
   }
@@ -301,7 +366,12 @@ function updateNfTopnavActive() {
 function applyTheme(theme) {
   const changed = state.theme !== theme;
   state.theme = theme;
-  document.body.classList.toggle('theme-netflix', theme === 'netflix');
+  // 'whale' reutiliza toda la lógica/DOM del tema Netflix (filas,
+  // navegación por control remoto, banner) y solo le suma su propia
+  // clase para el reskin visual (riel lateral, colores, tarjetas).
+  // Así no hace falta duplicar renderHomeNetflix() ni el manejo de teclas.
+  document.body.classList.toggle('theme-netflix', theme === 'netflix' || theme === 'whale');
+  document.body.classList.toggle('theme-whale', theme === 'whale');
   try { localStorage.setItem('mythos-theme', theme); } catch (e) { /* ignorar si no hay storage */ }
   // Si el tema cambió mientras el usuario ya estaba dentro de una
   // pantalla de categoría, la re-renderizamos al instante.
@@ -310,7 +380,7 @@ function applyTheme(theme) {
 
 function rerenderCurrentScreenForTheme() {
   if (state.currentScreen === 'home') {
-    if (state.theme === 'netflix') renderHomeNetflix();
+    if (document.body.classList.contains('theme-netflix')) renderHomeNetflix();
     return; // volviendo a 'default' no hace falta re-render: home-default-view ya está intacto
   }
   if (state.currentScreen !== 'app') return;
@@ -430,7 +500,7 @@ function initUI() {
   injectAdminTile();   // añade tile de admin al dock si corresponde
   renderAppGrid();
   renderSuggestions();
-  if (state.theme === 'netflix') renderHomeNetflix();
+  if (document.body.classList.contains('theme-netflix')) renderHomeNetflix();
   initClock();
   initRemoteNav();
   initFocusGlow();
@@ -661,9 +731,10 @@ function handleHomeKey(key) {
     const playBtn    = document.getElementById('detail-play-btn');
     const closeBtn   = document.getElementById('detail-close-btn');
     const restartBtn = document.getElementById('detail-restart-btn');
+    const removeBtn  = document.getElementById('detail-remove-btn');
     const hasRestart = !restartBtn.classList.contains('hidden');
-    const order = hasRestart ? ['play', 'restart', 'close'] : ['play', 'close'];
-    const btnOf = (id) => id === 'play' ? playBtn : id === 'restart' ? restartBtn : closeBtn;
+    const order = hasRestart ? ['play', 'restart', 'remove', 'close'] : ['play', 'close'];
+    const btnOf = (id) => id === 'play' ? playBtn : id === 'restart' ? restartBtn : id === 'remove' ? removeBtn : closeBtn;
     if (key === 'Escape' || key === 'Backspace') { playSnd('nav'); closeDetailModal(); return; }
     if (key === 'ArrowLeft' || key === 'ArrowRight') {
       playSnd('nav');
@@ -786,6 +857,29 @@ function homeNfRowHtml(rIdx, title, accent, innerHtml) {
     </div>`;
 }
 
+/* ── TEMA WHALE — dock de apps horizontal en Home. Reusa 100% los
+   datos y el click (launchApp) del dock/launcher clásico ya
+   configurado desde admin — solo cambia el contenedor (fila con
+   scroll en vez de grid), reusando la clase .app-tile existente
+   (ver CSS ".home-netflix-view .nf-row-track .app-tile" ya previsto). */
+function homeWhaleDockRowHtml(rIdx) {
+  // "Panel Admin" y "Configuración" NO se incluyen acá: son ítems de
+  // sistema y ya están disponibles en el desplegable "Más" del riel
+  // lateral (ver isSystemNavApp() en renderNfTopnav). Esta fila solo
+  // muestra las apps de streaming/contenido (Mike, jul 2026).
+  const apps = (state.apps || []).filter(app => !isSystemNavApp(app));
+  if (!apps.length) return '';
+  const inner = apps.map((app, i) => `
+    <div class="app-tile tile-color-${app.color || 'purple'}" tabindex="-1" data-row-type="dockapp" data-idx="${i}">
+      <div class="tile-bg" aria-hidden="true"></div>
+      <div class="tile-icon">${app.logo
+        ? `<img src="${app.logo}" alt="" loading="lazy" decoding="async" data-fallback="${app.emoji || '🚀'}" onerror="handleImgError(this)" />`
+        : (app.emoji || '🚀')}</div>
+      <div class="tile-label">${app.label || ''}</div>
+    </div>`).join('');
+  return homeNfRowHtml(rIdx, 'Tus apps', '#d4537e', inner);
+}
+
 function renderHomeNetflix() {
   const root = document.getElementById('home-netflix-view');
   if (!root) return;
@@ -793,6 +887,13 @@ function renderHomeNetflix() {
   const movies = state.movies || [];
   const livetv = state.livetv || [];
   const radio  = state.radio  || [];
+
+  /* Tema whale (v2, jul 2026): la referencia real de Whale OS usa un
+     banner de 1 sola película/serie destacada — no la fila de 3
+     categorías de la v1. Se vuelve a activar el hero normal para
+     whale, solo con piel visual distinta (ver CSS body.theme-whale
+     .home-hero-*). */
+  const isWhale = document.body.classList.contains('theme-whale');
 
   /* Banner destacado — solo películas (nunca Live TV/Radio). Usa el
      backdrop real de TMDB (horizontal, admin.html → auto-metadata) si
@@ -814,7 +915,7 @@ function renderHomeNetflix() {
     <div class="home-hero-thumb"><img src="${hero.item.poster}" alt="" onerror="this.parentElement.style.display='none'" /></div>`;
 
   const heroHtml = !hero ? '' : `
-    <div class="home-hero-banner${heroThumbHtml ? ' has-thumb' : ''}">
+    <div id="home-hero-banner" class="home-hero-banner${heroThumbHtml ? ' has-thumb' : ''}">
       ${heroBgHtml}
       ${heroThumbHtml}
       <div class="home-hero-scrim"></div>
@@ -870,6 +971,7 @@ function renderHomeNetflix() {
           <div class="cw-frame" style="--cw-accent:${accent}">
             ${frameHtml}
             <div class="cw-scrim"></div>
+            <button type="button" class="cw-remove-btn" data-remove-idx="${i}" title="Quitar de Continuar viendo" aria-label="Quitar de Continuar viendo">✕</button>
             <div class="cw-play"><svg width="16" height="16" viewBox="0 0 24 24" fill="#fff"><polygon points="5,3 19,12 5,21"/></svg></div>
             <div class="cw-title">${m.name || m.title || ''}</div>
             <div class="cw-progress"><div class="cw-progress-fill" style="width:${pct}%"></div></div>
@@ -918,11 +1020,28 @@ function renderHomeNetflix() {
     rowsHtml.push(homeNfRowHtml(rIdx++, 'Radio', '#993556', inner));
   }
 
+  if (isWhale) {
+    const dockRow = homeWhaleDockRowHtml(rIdx++);
+    if (dockRow) rowsHtml.push(dockRow);
+  }
+
   root.innerHTML = heroHtml + `<div class="nf-rows">${rowsHtml.join('')}</div>`;
 
   // Wiring de clics — un solo listener delegado, .onclick para ser
   // idempotente entre re-renders (igual criterio que wireRowArrows).
   root.onclick = (e) => {
+    const removeBtn = e.target.closest('.cw-remove-btn');
+    if (removeBtn) {
+      e.stopPropagation();
+      const { continueItems: _continueItems } = state._homeNfData;
+      const _idx = parseInt(removeBtn.dataset.removeIdx, 10);
+      const _ci  = _continueItems[_idx];
+      if (_ci && _ci.m) {
+        removeProgressFromServer(_ci.m.name || _ci.m.title || '');
+        renderHomeNetflix();
+      }
+      return;
+    }
     const card = e.target.closest('[data-row-type]');
     if (!card) return;
     const { continueItems, newItems, moviesRow, livetvRow, radioRow, newItemsAll } = state._homeNfData;
@@ -937,6 +1056,7 @@ function renderHomeNetflix() {
       case 'more-movies': openMovies(); break;
       case 'more-livetv': openLiveTV(); break;
       case 'more-radio':  openRadio(); break;
+      case 'dockapp':     { const app = (state.apps || [])[idx]; if (app) launchApp(app); break; }
     }
   };
 
@@ -987,6 +1107,17 @@ function updateHomeHeroFocus() {
   const infoBtn = document.getElementById('home-hero-info');
   if (playBtn) playBtn.classList.toggle('focused', state._homeNfHeroBtn === 'play');
   if (infoBtn) infoBtn.classList.toggle('focused', state._homeNfHeroBtn === 'info');
+  // BUG FIX (jul 2026): antes esta función solo togleaba el foco de los
+  // botones Reproducir/Más info, pero nunca hacía scroll hasta el banner
+  // en sí. Resultado: al subir con el control desde la primera fila, el
+  // banner quedaba fuera de la pantalla (más arriba, sin verse) y la
+  // siguiente flecha Arriba ya saltaba al menú, dando la sensación de que
+  // el banner se "saltaba" por completo. Con block:'start' se fuerza el
+  // scroll completo hasta que el banner quede arriba del todo, visible,
+  // antes de poder pasar al menú — igual en todos los temas (Netflix,
+  // Whale, etc.), ya que esta función es compartida por todos.
+  const banner = document.getElementById('home-hero-banner');
+  if (banner) banner.scrollIntoView({ block: 'start', behavior: 'smooth' });
 }
 function focusHomeNf(row, col) {
   const rows = getHomeNfRows();
@@ -1365,9 +1496,30 @@ function openDetailModal(type, item) {
   const restartBtn = document.getElementById('detail-restart-btn');
   const isNF     = state.theme === 'netflix';
 
+  // Botón "Quitar de Continuar viendo" — se crea una sola vez, al lado
+  // del restartBtn, igual que el selector de servidores más abajo
+  // (así no depende de tener que tocar index.html para agregarlo).
+  let removeBtn = document.getElementById('detail-remove-btn');
+  if (!removeBtn) {
+    removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.id = 'detail-remove-btn';
+    removeBtn.className = 'detail-btn-restart';
+    removeBtn.textContent = 'Quitar de Continuar viendo';
+    restartBtn.parentElement.insertBefore(removeBtn, restartBtn.nextSibling);
+    removeBtn.addEventListener('click', () => {
+      const item = state._detailItem;
+      if (!item) return;
+      removeProgressFromServer(item.name || item.title || '');
+      closeDetailModal();
+      if (document.body.classList.contains('theme-netflix')) renderHomeNetflix();
+    });
+  }
+
   // Reset por defecto — se vuelve a mostrar más abajo solo si aplica
   progWrap.classList.add('hidden');
   restartBtn.classList.add('hidden');
+  removeBtn.classList.add('hidden');
 
   // Limpiar hero Netflix de llamadas anteriores
   card.style.backgroundImage = '';
@@ -1412,6 +1564,7 @@ function openDetailModal(type, item) {
       progLbl.textContent  = `${pct}% visto`;
       progWrap.classList.remove('hidden');
       restartBtn.classList.remove('hidden');
+      removeBtn.classList.remove('hidden');
       playBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg> Continuar';
     }
 
@@ -1659,6 +1812,7 @@ function closePlayer() {
     if (video && isFinite(video.duration) && video.duration > 0) {
       const url = (state._movieUrls && state._movieUrls[state._movieUrlIdx]) || state._trackMovie.url;
       saveProgressToServer(state._trackMovie.name, url, video.currentTime, video.duration);
+      upsertLocalProgress(state._trackMovie.name, url, video.currentTime, video.duration);
     }
     state._trackMovie = null;
     state._resumeAt   = 0;
@@ -1675,6 +1829,19 @@ function closePlayer() {
     const cb = state.playerOnClose;
     state.playerOnClose = null;
     cb();
+  }
+  // BUG FIX (jul 2026): la gran mayoría de los playStream(...) de
+  // películas NO pasan un onClose (queda null) — el player es un
+  // overlay a pantalla completa por encima del Home, así que al
+  // cerrarlo simplemente reaparecía el Home tal cual había quedado
+  // ANTES de entrar a ver la película, sin repintarse nunca. Antes de
+  // esto solo se actualizaba state.progress (arriba), pero nadie le
+  // pedía a la fila "Continuar viendo" que se vuelva a dibujar con ese
+  // dato nuevo — de ahí que hiciera falta refrescar la página entera.
+  // Si el onClose de arriba ya navegó a otra pantalla, esto no hace
+  // nada extra (currentScreen ya no sería 'home').
+  if (state.currentScreen === 'home' && document.body.classList.contains('theme-netflix')) {
+    renderHomeNetflix();
   }
 }
 
@@ -1940,6 +2107,7 @@ function playStream(url, title, onClose, isLive = false) {
       state._lastProgressSave = now;
       const url = (state._movieUrls && state._movieUrls[state._movieUrlIdx]) || state._trackMovie.url;
       saveProgressToServer(state._trackMovie.name, url, videoEl.currentTime, videoEl.duration);
+      upsertLocalProgress(state._trackMovie.name, url, videoEl.currentTime, videoEl.duration);
     });
 
     fsBtn.onclick = () => {
